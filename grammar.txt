@@ -1,0 +1,32 @@
+===========================================
+Example
+===========================================
+
+const foo: u32 = 0;
+var bar: i32 = foo;
+
+struct Vec {
+    x: u32,
+    y: u32,
+    z: u32
+}
+
+fn baz<N: usize>(ptr: *Vec) Vec {
+    return ptr[N - 1];
+}
+
+
+
+===========================================
+Grammar
+===========================================
+
+declaration -> varDecl | structDecl | fnDecl
+varDecl     -> ("const" | "var") IDENTIFIER (":" IDENTIFIER)? "=" expression ";"
+structDecl  -> "struct" IDENTIFIER "{" paramList "}"
+paramList   -> (paramDecl ",")* paramDecl?
+paramDecl   -> IDENTIFIER ":" IDENTIFIER
+fnDecl      -> "fn" IDENTIFIER ("<" paramList ">" &| "(" paramList ")") block
+block       -> "{" statement* "}"
+statement   -> varDecl | expression ";" | "return" expression ";"
+expression  -> 
