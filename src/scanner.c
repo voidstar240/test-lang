@@ -1,4 +1,4 @@
-#include "lexer.h"
+#include "scanner.h"
 
 static inline bool scnr_is_last(const Scanner* scnr) {
     return scnr->current + 1 >= scnr->start + scnr->length;

@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "lexer.h"
+#include "scanner.h"
 
 int repl(void) {
     while (1) {

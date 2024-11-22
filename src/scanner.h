@@ -1,5 +1,5 @@
-#ifndef LEXER_H
-#define LEXER_H
+#ifndef SCANNER_H
+#define SCANNER_H
 
 #include <stdbool.h>
 #include <stddef.h>
