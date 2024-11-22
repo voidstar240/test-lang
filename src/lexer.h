@@ -21,6 +21,7 @@ typedef enum {
     TKN_SLASH,           TKN_SLASH_EQUAL,
     TKN_PERCENT,         TKN_PERCENT_EQUAL,
     TKN_TILDE,           TKN_TILDE_EQUAL,
+    TKN_CARET,           TKN_CARET_EQUAL,
     TKN_BANG,            TKN_BANG_EQUAL,
     TKN_EQUAL,           TKN_EQUAL_EQUAL,
     TKN_LESS,            TKN_LESS_EQUAL,
@@ -31,7 +32,7 @@ typedef enum {
     TKN_PIPE,            TKN_PIPE_EQUAL, TKN_PIPE_PIPE,
 
     // LITERALS
-    TKN_IDENTIFIER, TKN_STRING, TKN_NUMBER,
+    TKN_CHAR, TKN_STRING, TKN_NUMBER, TKN_IDENTIFIER, 
 
     // KEYWORDS
     TKN_CONST, TKN_ELSE, TKN_FALSE,  TKN_FN,   TKN_FOR,   TKN_IF,  TKN_NONE,
@@ -101,6 +102,8 @@ static inline const char* token_type_str(TokenType type) {
         case TKN_PERCENT_EQUAL: return "percent_equal";
         case TKN_TILDE: return "tilde";
         case TKN_TILDE_EQUAL: return "tilde_equal";
+        case TKN_CARET: return "caret";
+        case TKN_CARET_EQUAL: return "caret_equal";
         case TKN_BANG: return "bang";
         case TKN_BANG_EQUAL: return "bang_equal";
         case TKN_EQUAL: return "equal";
@@ -119,9 +122,10 @@ static inline const char* token_type_str(TokenType type) {
         case TKN_PIPE: return "pipe";
         case TKN_PIPE_EQUAL: return "pipe_equal";
         case TKN_PIPE_PIPE: return "pipe_pipe";
-        case TKN_IDENTIFIER: return "identifier";
+        case TKN_CHAR: return "char";
         case TKN_STRING: return "string";
         case TKN_NUMBER: return "number";
+        case TKN_IDENTIFIER: return "identifier";
         case TKN_CONST: return "const";
         case TKN_ELSE: return "else";
         case TKN_FALSE: return "false";
@@ -137,7 +141,7 @@ static inline const char* token_type_str(TokenType type) {
         case TKN_VAR: return "var";
         case TKN_WHILE: return "while";
         case TKN_ZEROS: return "zeros";
-        default: return "DEFAULT";
+        default: return "NO_NAME";
     }
 }
 

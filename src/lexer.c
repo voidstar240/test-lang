@@ -1,23 +1,5 @@
 #include "lexer.h"
 
-#define range_A_Z 'A': case 'B': case 'C': case 'D': case 'E': case 'F':\
-        case 'G': case 'H': case 'I': case 'J': case 'K': case 'L':\
-        case 'M': case 'N': case 'O': case 'P': case 'Q': case 'R':\
-        case 'S': case 'T': case 'U': case 'V': case 'W': case 'X':\
-        case 'Y': case 'Z'
-
-#define range_a_z 'a': case 'b': case 'c': case 'd': case 'e': case 'f':\
-        case 'g': case 'h': case 'i': case 'j': case 'k': case 'l':\
-        case 'm': case 'n': case 'o': case 'p': case 'q': case 'r':\
-        case 's': case 't': case 'u': case 'v': case 'w': case 'x':\
-        case 'y': case 'z'
-
-#define range_1_9 '1': case '2': case '3': case '4': case '5': case '6':\
-        case '7': case '8': case '9'
-
-#define range_0_9 '0': case '1': case '2': case '3': case '4': case '5':\
-        case '6': case '7': case '8': case '9'
-
 static inline bool scnr_is_last(const Scanner* scnr) {
     return scnr->current + 1 >= scnr->start + scnr->length;
 }
@@ -145,41 +127,138 @@ static Token mktoken(const Scanner* scnr, TokenType type) {
     };
 }
 
-static Token scan_number(Scanner* scnr) {
+static inline bool is_digit(char c) {
+    return c >= '0' && c <= '9';
+}
+
+static inline bool is_upper_case(char c) {
+    return c >= 'A' && c <= 'Z';
+}
+
+static inline bool is_lower_case(char c) {
+    return c >= 'a' && c <= 'z';
+}
+
+static inline bool is_identifier_char(char c) {
+    return is_upper_case(c) || is_lower_case(c) || is_digit(c) || c == '_';
+}
+
+static Token scan_char(Scanner* scnr) {
+    bool esc = false;
     while (true) {
         switch (scnr_peek(scnr)) {
-            case 'E':
+            case '\0': return mktoken(scnr, TKN__NULL);
+            case '\n': return mktoken(scnr, TKN__NULL);
+            case '\\':
                 scnr->current++;
-                if (scnr_peek(scnr) == '-') {
-                    switch (scnr_peek_next(scnr)) {
-                        case range_0_9:
-                            scnr->current += 2;
-                            continue;
-                    }
-                    return mktoken(scnr, TKN_NUMBER);
+                if (!esc) {
+                    esc = true;
+                } else {
+                    esc = false;
                 }
                 continue;
-            case '.':
-            case '_':
-            case range_0_9:
+            case '\'':
                 scnr->current++;
+                if (!esc) {
+                    return mktoken(scnr, TKN_CHAR);
+                }
+                esc = false;
                 continue;
-            default: return mktoken(scnr, TKN_NUMBER);
+            default:
+                scnr->current++;
+                esc = false;
+                continue;
+        }
+    }
+}
+
+static Token scan_string(Scanner* scnr) {
+    bool esc = false;
+    while (true) {
+        switch (scnr_peek(scnr)) {
+            case '\0': return mktoken(scnr, TKN__NULL);
+            case '\n': return mktoken(scnr, TKN__NULL);
+            case '\\':
+                scnr->current++;
+                if (!esc) {
+                    esc = true;
+                } else {
+                    esc = false;
+                }
+                continue;
+            case '"':
+                scnr->current++;
+                if (!esc) {
+                    return mktoken(scnr, TKN_STRING);
+                }
+                esc = false;
+                continue;
+            default:
+                scnr->current++;
+                esc = false;
+                continue;
+        }
+    }
+}
+
+static Token scan_number(Scanner* scnr) {
+    const char first = scnr->start[0];
+    bool has_dec = first == '.';
+    bool has_exp = false;
+    if (first == '0') {
+        switch (scnr_peek(scnr)) {
+            case 'b':
+                scnr->current++;
+                // TODO scan binary number
+                return mktoken(scnr, TKN__NULL);
+            case 'o':
+                scnr->current++;
+                // TODO scan octal number
+                return mktoken(scnr, TKN__NULL);
+            case 'x':
+                scnr->current++;
+                // TODO scan hex number
+                return mktoken(scnr, TKN__NULL);
+        }
+    }
+    while (true) {
+        const char c = scnr_peek(scnr);
+        if (c == '.') {
+            if (has_dec) {
+                return mktoken(scnr, TKN_NUMBER);
+            } 
+            has_dec = true;
+            scnr->current++;
+        } else if (c == 'E') {
+            if (has_exp) { return mktoken(scnr, TKN_NUMBER); }
+            scnr->current++;
+            has_exp = true;
+            has_dec = true;
+            const char p = scnr_peek(scnr);
+            if (p == '-') {
+                if (!is_digit(scnr_peek_next(scnr))) {
+                    return mktoken(scnr, TKN_NUMBER);
+                }
+                scnr->current += 2;
+            } else if (is_digit(p)) {
+                scnr->current++;
+            } else {
+                return mktoken(scnr, TKN_NUMBER);
+            }
+        } else if (is_digit(c) || c == '_') {
+            scnr->current++;
+        } else {
+            return mktoken(scnr, TKN_NUMBER);
         }
     }
 }
 
 static Token scan_identifier(Scanner* scnr) {
     while (true) {
-        switch (scnr_peek(scnr)) {
-            case range_A_Z:
-            case range_a_z:
-            case range_0_9:
-            case '_':
-                scnr->current++;
-                continue;
-            default: return mktoken(scnr, TKN_IDENTIFIER);
+        if (!is_identifier_char(scnr_peek(scnr))) {
+            return mktoken(scnr, TKN_IDENTIFIER);
         }
+        scnr->current++;
     }
 }
 
@@ -204,8 +283,8 @@ Token scnr_scan_token(Scanner* scnr) {
         case '?': return mktoken(scnr, TKN_QUESTION);
 
         case '.':
-            switch (scnr_peek(scnr)) {
-                case range_0_9: return scan_number(scnr);
+            if (is_identifier_char(scnr_peek(scnr))) {
+                return scan_number(scnr);
             }
             return mktoken(scnr, TKN_DOT);
 
@@ -221,6 +300,8 @@ Token scnr_scan_token(Scanner* scnr) {
             scnr_match(scnr, '=') ? TKN_PERCENT_EQUAL : TKN_PERCENT);
         case '~': return mktoken(scnr,
             scnr_match(scnr, '=') ? TKN_TILDE_EQUAL : TKN_TILDE);
+        case '^': return mktoken(scnr,
+            scnr_match(scnr, '=') ? TKN_CARET_EQUAL : TKN_CARET);
         case '!': return mktoken(scnr,
             scnr_match(scnr, '=') ? TKN_BANG_EQUAL : TKN_BANG);
         case '=': return mktoken(scnr,
@@ -246,56 +327,16 @@ Token scnr_scan_token(Scanner* scnr) {
             scnr_match(scnr, '=') ? TKN_PIPE_EQUAL :
                 scnr_match(scnr, '|') ? TKN_PIPE_PIPE : TKN_PIPE);
 
-        // STRING
-        case '"':;
-            bool esc = false;
-            while (true) {
-                switch (scnr_peek(scnr)) {
-                    case '\0': return mktoken(scnr, TKN__NULL);
-                    case '\n': return mktoken(scnr, TKN__NULL);
-                    case '\\':
-                        scnr->current++;
-                        if (!esc) {
-                            esc = true;
-                        } else {
-                            esc = false;
-                        }
-                        continue;
-                    case '"':
-                        scnr->current++;
-                        if (!esc) {
-                            return mktoken(scnr, TKN_STRING);
-                        }
-                        esc = false;
-                        continue;
-                    default:
-                        scnr->current++;
-                        esc = false;
-                        continue;
-                }
+        case '\'': return scan_char(scnr);
+        case '"': return scan_string(scnr);
+
+        default:
+            if (is_digit(c)) {
+                return scan_number(scnr);
+            } else if (is_identifier_char(c)) {
+                return scan_identifier(scnr);
+            } else {
+                return mktoken(scnr, TKN__NULL);
             }
-
-        // NUMBER
-        case '0':
-            switch (scnr_peek(scnr)) {
-                case 'b':
-                    // binary
-                    return mktoken(scnr, TKN__NULL);
-                case 'o':
-                    // octal
-                    return mktoken(scnr, TKN__NULL);
-                case 'x':
-                    // hex
-                    return mktoken(scnr, TKN__NULL);
-            } // FALLTHROUGH
-        case range_1_9:
-            return scan_number(scnr);
-
-        // IDENTIFIER
-        case range_A_Z:
-        case range_a_z:
-        case '_':
-            return scan_identifier(scnr);
     }
-    return mktoken(scnr, TKN__NULL);
 }
