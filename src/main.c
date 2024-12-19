@@ -5,6 +5,27 @@
 #include <fcntl.h>
 
 #include "scanner.h"
+#include "parser.h"
+
+int interp(const char* data, size_t len) {
+    Scanner scnr = scnr_init(data, len);
+    Parser par = parser_init(&scnr);
+    ASTRef expr = parse_expression(&par, 0);
+    printf("\n");
+    if (par.err_count == 0) {
+        printf("No Errors\n");
+        print_ast(expr);
+        printf("\n");
+        return 0;
+    } else {
+        printf("%zu ERRORS:\n", par.err_count);
+        for (size_t i = 0; i < par.err_count; i++) {
+            print_err(par.errs[i]);
+        }
+        printf("\n");
+        return 1;
+    }
+}
 
 int repl(void) {
     while (1) {
@@ -23,14 +44,13 @@ int repl(void) {
                 break;
             }
         }
-        Scanner scnr = scnr_init(buf, len);
-        while (!scnr_is_end(&scnr)) {
+        interp(buf, len);
+        /*while (!scnr_is_end(&scnr)) {
             const Token tok = scnr_scan_token(&scnr);
             printf("%s(%zu, %zu) ", token_type_str(tok.type), tok.length, tok.col);
-        }
-        printf("\n");
+        }*/
     }
-    return 1;
+    return 0;
 }
 
 int run_file(char* path) {
@@ -53,13 +73,7 @@ int run_file(char* path) {
         return 1;
     }
 
-    Scanner scnr = scnr_init(buf, len);
-    while (!scnr_is_end(&scnr)) {
-        Token tok = scnr_scan_token(&scnr);
-        printf("%s(%zu:%zu) ", token_type_str(tok.type), tok.line, tok.col);
-    }
-    printf("\n");
-    return 1;
+    return interp(buf, (size_t)len);
 }
 
 int main(int argc, char* argv[]) {
@@ -73,29 +87,4 @@ int main(int argc, char* argv[]) {
 
     fprintf(stderr, "Too many arguments.\n");
     return 1;
-    
-    int fd = open(argv[1], O_RDONLY);
-    if (fd == -1) {
-        fprintf(stderr, "ERROR: Failed to open file at %s.\n", argv[1]);
-        return 1;
-    }
-
-    char buf[4096];
-    int len = read(fd, buf, 4096);
-    if (len == -1) {
-        fprintf(stderr, "ERROR: Failed to read file.\n");
-        return 1;
-    }
-
-    if (len == 0) {
-        fprintf(stderr, "ERROR: File is empty.\n");
-        return 1;
-    }
-
-    Scanner scnr = scnr_init(buf, len);
-    scnr_skip_whitespace(&scnr);
-    printf("Input %d bytes.\n", len);
-    printf("%.*s", len, buf);
-    printf("%*c\n", (int)scnr.col, '^');
-    printf("First token at column %zu.\n", scnr.col);
 }

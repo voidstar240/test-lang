@@ -260,6 +260,7 @@ static Token scan_identifier(Scanner* scnr) {
         }
         scnr->current++;
     }
+    // TODO check if the ident is a keyword
 }
 
 Token scnr_scan_token(Scanner* scnr) {
@@ -283,7 +284,7 @@ Token scnr_scan_token(Scanner* scnr) {
         case '?': return mktoken(scnr, TKN_QUESTION);
 
         case '.':
-            if (is_identifier_char(scnr_peek(scnr))) {
+            if (is_digit(scnr_peek(scnr))) {
                 return scan_number(scnr);
             }
             return mktoken(scnr, TKN_DOT);

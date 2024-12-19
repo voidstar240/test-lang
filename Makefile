@@ -4,7 +4,7 @@ EXEC := lang
 SRCS := $(wildcard src/*.c)
 OBJS := $(patsubst src%,obj%, $(patsubst %.c,%.o, $(SRCS)))
 
-CFLAGS := -Wall -pedantic -Werror=incompatible-pointer-types-discards-qualifiers -std=c99
+CFLAGS := -Wall -pedantic -Werror=incompatible-pointer-types-discards-qualifiers -std=c99 -g -O0
 CC := clang
 
 all: $(EXEC) db
