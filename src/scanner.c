@@ -1,4 +1,7 @@
 #include "scanner.h"
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 static inline bool scnr_is_last(const Scanner* scnr) {
     return scnr->current + 1 >= scnr->start + scnr->length;
@@ -121,7 +124,7 @@ static Token mktoken(const Scanner* scnr, TokenType type) {
     return (Token){
         .type = type,
         .start = scnr->start,
-        .length = (size_t)(scnr->current - scnr->start),
+        .len = (size_t)(scnr->current - scnr->start),
         .col = scnr->col,
         .line = scnr->line,
     };
@@ -253,14 +256,50 @@ static Token scan_number(Scanner* scnr) {
     }
 }
 
+static Token ident_to_keyword(Token ident) {
+    typedef struct {
+        TokenType type;
+        char* str;
+    } KeywordStringPair;
+    const KeywordStringPair pairs[] = {
+        { TKN_CONST, "const" },
+        { TKN_ELSE, "else" },
+        { TKN_FALSE, "false" },
+        { TKN_FN, "fn" },
+        { TKN_FOR, "for" },
+        { TKN_IF, "if" },
+        { TKN_NONE, "none" },
+        { TKN_ONES, "ones" },
+        { TKN_OR, "or" },
+        { TKN_RETURN, "return" },
+        { TKN_TRUE, "true" },
+        { TKN_UNDEF, "undef" },
+        { TKN_VAR, "var" },
+        { TKN_WHILE, "while" },
+        { TKN_ZEROS, "zeros" },
+        { TKN__NULL, NULL }
+    };
+    const KeywordStringPair* pair = pairs;
+    for (; pair->type != TKN__NULL; pair++) {
+        if (ident.len != strlen(pair->str)) { continue; }
+        if (strncmp(pair->str, ident.start, ident.len) == 0) {
+            ident.type = pair->type;
+            return ident;
+        }
+    }
+    return ident;
+}
+
 static Token scan_identifier(Scanner* scnr) {
+    Token ident;
     while (true) {
         if (!is_identifier_char(scnr_peek(scnr))) {
-            return mktoken(scnr, TKN_IDENTIFIER);
+            ident = mktoken(scnr, TKN_IDENTIFIER);
+            break;
         }
         scnr->current++;
     }
-    // TODO check if the ident is a keyword
+    return ident_to_keyword(ident);
 }
 
 Token scnr_scan_token(Scanner* scnr) {

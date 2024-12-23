@@ -43,7 +43,7 @@ typedef enum {
 typedef struct {
     TokenType type;
     const char* start;
-    size_t length;
+    size_t len;
     size_t line;
     size_t col;
 } Token;

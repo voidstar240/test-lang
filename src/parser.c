@@ -136,7 +136,7 @@ static int64_t int_from_str(const char* bytes, size_t len) {
 
 LiteralAST* parse_literal(Parser* par) {
     LiteralAST* lit = malloc(sizeof(LiteralAST));
-    lit->number = int_from_str(par->token.start, par->token.length);
+    lit->number = int_from_str(par->token.start, par->token.len);
     pop_token(par);
     return lit;
 }
@@ -145,7 +145,7 @@ SymbolAST* parse_symbol(Parser* par) {
     SymbolAST* sym = malloc(sizeof(SymbolAST));
     Token ident = pop_token(par);
     sym->bytes = ident.start;
-    sym->len = ident.length;
+    sym->len = ident.len;
     return sym;
 }
 
@@ -461,7 +461,6 @@ ASTRef parse_expression(Parser* par, int8_t rbp) {
     }
     return left;
 }
-
 
 static void print_literal(const LiteralAST* lit) {
     printf("Literal(%ld)", lit->number);
