@@ -80,7 +80,7 @@ static inline bool valid_ast(ASTRef ast) {
     return (ast.type != AST__NULL) && (ast.node != NULL);
 }
 
-void print_ast(ASTRef ast);
+void print_ast(ASTRef ast, size_t depth);
 
 
 typedef enum {

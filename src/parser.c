@@ -462,82 +462,117 @@ ASTRef parse_expression(Parser* par, int8_t rbp) {
     return left;
 }
 
+static void print_indent(size_t depth) {
+    /*for (size_t i = 1; i < depth; i++) {
+        printf("│   ");
+    }
+    if (depth > 0) {
+        if (last) {
+            printf("└── ");
+        } else {
+            printf("├── ");
+        }
+    }*/
+    for (size_t i = 0; i < depth; i++) {
+        printf("  ");
+    }
+}
+
 static void print_literal(const LiteralAST* lit) {
-    printf("Literal(%ld)", lit->number);
+    printf("Literal { %ld }\n", lit->number);
 }
 
 static void print_symbol(const SymbolAST* sym) {
-    printf("Symbol(%.*s)", (int)sym->len, sym->bytes);
+    printf("Symbol { \"%.*s\" }\n", (int)sym->len, sym->bytes);
 }
 
-static void print_unary(const UnaryAST* unary, const char* op_name) {
-    printf("Unary%s(inner: ", op_name);
-    print_ast(unary->inner);
-    printf(")");
+static void print_unary(const UnaryAST* unary, const char* op_name, size_t depth) {
+    printf("Unary%s {\n", op_name);
+    print_indent(depth + 1);
+    printf("inner = ");
+    print_ast(unary->inner, depth + 1);
+    print_indent(depth);
+    printf("}\n");
 }
 
-static void print_binary(const BinaryAST* binary, const char* op_name) {
-    printf("Binary%s(lhs: ", op_name);
-    print_ast(binary->lhs);
-    printf(" rhs: ");
-    print_ast(binary->rhs);
-    printf(")");
+static void print_binary(const BinaryAST* binary, const char* op_name, size_t depth) {
+    printf("Binary%s {\n", op_name);
+    print_indent(depth + 1);
+    printf("lhs = ");
+    print_ast(binary->lhs, depth + 1);
+    print_indent(depth + 1);
+    printf("rhs = ");
+    print_ast(binary->rhs, depth + 1);
+    print_indent(depth);
+    printf("}\n");
 }
 
-static void print_access(const AccessAST* access) {
-    printf("Access(parent: ");
-    print_ast(access->parent);
-    printf(" child: ");
+static void print_access(const AccessAST* access, size_t depth) {
+    printf("Access {\n");
+    print_indent(depth + 1);
+    printf("parent = ");
+    print_ast(access->parent, depth + 1);
+    print_indent(depth + 1);
+    printf("child = ");
     print_symbol(access->child);
-    printf(")");
+    print_indent(depth);
+    printf("}\n");
 }
 
-static void print_call(const CallAST* call) {
-    printf("Call(callee: ");
-    print_ast(call->callee);
+static void print_call(const CallAST* call, size_t depth) {
+    printf("Call {\n");
+    print_indent(depth + 1);
+    printf("callee = ");
+    print_ast(call->callee, depth + 1);
     for (uint8_t i = 0; i < call->args_len; i++) {
-        printf(" arg%d: ", i);
-        print_ast(call->args[i]);
+        print_indent(depth + 1);
+        printf("args[%d] = ", i);
+        print_ast(call->args[i], depth + 1);
     }
-    printf(")");
+    print_indent(depth);
+    printf("}\n");
 }
 
-static void print_index(const IndexAST* index) {
-    printf("Index(item: ");
-    print_ast(index->item);
-    printf(" index: ");
-    print_ast(index->index);
-    printf(")");
+static void print_index(const IndexAST* index, size_t depth) {
+    printf("Index {\n");
+    print_indent(depth + 1);
+    printf("item = ");
+    print_ast(index->item, depth + 1);
+    print_indent(depth + 1);
+    printf("index = ");
+    print_ast(index->index, depth + 1);
+    print_indent(depth);
+    printf("}\n");
 }
 
-void print_ast(ASTRef ast) {
+void print_ast(ASTRef ast, size_t depth) {
     switch (ast.type) {
         case AST_LITERAL: print_literal(ast.node); return;
         case AST_SYMBOL: print_symbol(ast.node); return;
 
-        case AST_UNARY_BOOL_NOT: print_unary(ast.node, "BoolNot"); return;
-        case AST_UNARY_BIT_NOT: print_unary(ast.node, "BitNot"); return;
-        case AST_UNARY_NEGATE: print_unary(ast.node, "Negate"); return;
+        case AST_UNARY_BOOL_NOT: print_unary(ast.node, "BoolNot", depth); return;
+        case AST_UNARY_BIT_NOT: print_unary(ast.node, "BitNot", depth); return;
+        case AST_UNARY_NEGATE: print_unary(ast.node, "Negate", depth); return;
 
-        case AST_BINARY_ASSIGN: print_binary(ast.node, "Assign"); return;
-        case AST_BINARY_EQUAL: print_binary(ast.node, "Equal"); return;
-        case AST_BINARY_NOT_EQUAL: print_binary(ast.node, "NotEqual"); return;
-        case AST_BINARY_LESS: print_binary(ast.node, "Less"); return;
-        case AST_BINARY_LESS_EQUAL: print_binary(ast.node, "LessEqual"); return;
-        case AST_BINARY_GREATER: print_binary(ast.node, "Greater"); return;
-        case AST_BINARY_GREATER_EQUAL: print_binary(ast.node, "GreaterEqual"); return;
-        case AST_BINARY_ADD: print_binary(ast.node, "Add"); return;
-        case AST_BINARY_SUB: print_binary(ast.node, "Sub"); return;
-        case AST_BINARY_MUL: print_binary(ast.node, "Mul"); return;
-        case AST_BINARY_DIV: print_binary(ast.node, "Div"); return;
-        case AST_BINARY_MOD: print_binary(ast.node, "Mod"); return;
+        case AST_BINARY_ASSIGN: print_binary(ast.node, "Assign", depth); return;
+        case AST_BINARY_EQUAL: print_binary(ast.node, "Equal", depth); return;
+        case AST_BINARY_NOT_EQUAL: print_binary(ast.node, "NotEqual", depth); return;
+        case AST_BINARY_LESS: print_binary(ast.node, "Less", depth); return;
+        case AST_BINARY_LESS_EQUAL: print_binary(ast.node, "LessEqual", depth); return;
+        case AST_BINARY_GREATER: print_binary(ast.node, "Greater", depth); return;
+        case AST_BINARY_GREATER_EQUAL: print_binary(ast.node, "GreaterEqual", depth); return;
+        case AST_BINARY_ADD: print_binary(ast.node, "Add", depth); return;
+        case AST_BINARY_SUB: print_binary(ast.node, "Sub", depth); return;
+        case AST_BINARY_MUL: print_binary(ast.node, "Mul", depth); return;
+        case AST_BINARY_DIV: print_binary(ast.node, "Div", depth); return;
+        case AST_BINARY_MOD: print_binary(ast.node, "Mod", depth); return;
 
-        case AST_ACCESS: print_access(ast.node); return;
-        case AST_CALL: print_call(ast.node); return;
-        case AST_INDEX: print_index(ast.node); return;
+        case AST_ACCESS: print_access(ast.node, depth); return;
+        case AST_CALL: print_call(ast.node, depth); return;
+        case AST_INDEX: print_index(ast.node, depth); return;
 
-        case AST__NULL: printf("NULL"); return;
-        case AST__COUNT: printf("COUNT"); return;
-        case AST__MAX: printf("MAX"); return;
+        case AST__NULL: printf("NULL\n"); return;
+        case AST__COUNT: printf("COUNT\n"); return;
+        case AST__MAX: printf("MAX\n"); return;
     }
 }
