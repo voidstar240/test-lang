@@ -12,15 +12,15 @@ int interp(const char* data, size_t len) {
     Parser par = parser_init(&scnr);
     ASTRef expr = parse_expression(&par, 0);
     printf("\n");
-    if (par.err_count == 0) {
+    if (par.errs.len == 0) {
         printf("No Errors\n\n");
         printf("Syntax Tree:\n");
         print_ast(expr, 0);
         return 0;
     } else {
-        printf("%zu ERRORS:\n", par.err_count);
-        for (size_t i = 0; i < par.err_count; i++) {
-            print_err(par.errs[i]);
+        printf("%zu ERRORS:\n", par.errs.len);
+        for (size_t i = 0; i < par.errs.len; i++) {
+            print_err(arrlist_get(&par.errs, ParseError, i));
         }
         printf("\n");
         printf("Syntax Tree:\n");

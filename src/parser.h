@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "scanner.h"
+#include "array_list.h"
 
 typedef enum {
     AST__NULL,
@@ -119,16 +120,14 @@ void print_err(ParseError err);
 typedef struct {
     Scanner* scnr;
     Token token;
-    ParseError* errs;
-    size_t err_count;
+    ArrayList errs;
 } Parser;
 
 static inline Parser parser_init(Scanner* scnr) {
     return (Parser){
         .scnr = scnr,
         .token = scnr_scan_token(scnr),
-        .errs = NULL,
-        .err_count = 0,
+        .errs = arrlist_init(ParseError),
     };
 }
 

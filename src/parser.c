@@ -23,14 +23,7 @@ static inline ParseError err_unexp(Token current, TokenType expected) {
 }
 
 static void log_error(Parser* par, ParseError err) {
-    ParseError* old = par->errs;
-    par->errs = calloc(par->err_count + 1, sizeof(ParseError));
-    if (par->err_count > 0) {
-        memcpy(par->errs, old, par->err_count * sizeof(ParseError));
-        free(old);
-    }
-    par->errs[par->err_count] = err;
-    par->err_count++;
+    arrlist_push(&par->errs, ParseError, err);
 }
 
 static ASTRef ast_error(Parser* par, ParseError err) {
@@ -358,32 +351,31 @@ static ASTRef make_binary(InfixOp op, ASTRef lhs, ASTRef rhs) {
 }
 
 static ASTRef parse_call(Parser* par, ASTRef callee) {
-    CallAST* call = malloc(sizeof(CallAST));
-    call->callee = callee;
-    call->args_len = 0;
+    ArrayList args = arrlist_init(ASTRef);
     while (true) {
         if (par->token.type == TKN_R_PAREN) {
             pop_token(par);
             break;
         }
-        if (call->args_len < 128) {
-            ASTRef* old = call->args;
-            call->args = calloc(call->args_len + 1, sizeof(ASTRef));
-            if (call->args_len > 0) {
-                memcpy(call->args, old, call->args_len * sizeof(ASTRef));
-                free(old);
-            }
-            call->args[call->args_len] = parse_expression(par, 0);
-            if (!valid_ast(call->args[call->args_len])) {
-                // TODO Free args
-                return ast_error(par, err_str("Expr. parse failed."));
-            }
-            call->args_len++;
+
+        ASTRef arg_expr = parse_expression(par, 0);
+        if (!valid_ast(arg_expr)) {
+            arrlist_deinit(&args);
+            // TODO make error more specific (include arg num)
+            return ast_error(par, err_str("Expr. parse failed."));
         }
+        arrlist_push(&args, ASTRef, arg_expr);
+
         if (par->token.type == TKN_COMMA) {
             pop_token(par);
         }
     }
+
+    CallAST* call = malloc(sizeof(CallAST));
+    call->callee = callee;
+    call->args = (ASTRef*)arrlist_to_array(&args);
+    call->args_len = args.len;
+
     return (ASTRef) {
         .type = AST_CALL,
         .node = call,
