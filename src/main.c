@@ -10,12 +10,12 @@
 int interp(const char* data, size_t len) {
     Scanner scnr = scnr_init(data, len);
     Parser par = parser_init(&scnr);
-    ASTRef expr = parse_expression(&par, 0);
+    ASTRef fn_decl = parse_function_decl(&par);
     printf("\n");
     if (par.errs.len == 0) {
         printf("No Errors\n\n");
         printf("Syntax Tree:\n");
-        print_ast(expr, 0);
+        print_ast(fn_decl, 0);
         return 0;
     } else {
         printf("%zu ERRORS:\n", par.errs.len);
@@ -24,7 +24,7 @@ int interp(const char* data, size_t len) {
         }
         printf("\n");
         printf("Syntax Tree:\n");
-        print_ast(expr, 0);
+        print_ast(fn_decl, 0);
         return 1;
     }
 }

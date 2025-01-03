@@ -34,6 +34,8 @@ typedef enum {
     AST_INDEX,
     AST_ACCESS,
 
+    AST_FUNCTION_DECL,
+
     AST__COUNT,
     AST__MAX = 0xff,
 } ASTType;
@@ -76,6 +78,22 @@ typedef struct {
     ASTRef parent;
     SymbolAST* child;
 } AccessAST;
+
+typedef struct {
+    const char* name;
+    size_t name_len;
+    const char* type;
+    size_t type_len;
+} Param;
+
+typedef struct {
+    const char* name;
+    size_t name_len;
+    Param* params;
+    size_t params_len;
+    ASTRef* statements;
+    size_t statements_len;
+} FunctionDeclAST;
 
 static inline bool valid_ast(ASTRef ast) {
     return (ast.type != AST__NULL) && (ast.node != NULL);
@@ -133,5 +151,6 @@ static inline Parser parser_init(Scanner* scnr) {
 
 LiteralAST* parse_literal(Parser* par);
 ASTRef parse_expression(Parser* par, int8_t rbp);
+ASTRef parse_function_decl(Parser* par);
 
 #endif

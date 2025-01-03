@@ -454,6 +454,102 @@ ASTRef parse_expression(Parser* par, int8_t rbp) {
     return left;
 }
 
+// TODO make parse_expression fn
+
+ASTRef parse_function_decl(Parser* par) {
+    if (!expect_token(par, TKN_FN)) {
+        return ast_error(par, err_str("Failed to parse fn decl"));
+    }
+
+    Token name_token = par->token;
+    if (!expect_token(par, TKN_IDENTIFIER)) {
+        return ast_error(par, err_str("Failed to parse fn decl"));
+    }
+
+    if (!expect_token(par, TKN_L_PAREN)) {
+        return ast_error(par, err_str("Failed to parse fn decl"));
+    }
+
+    ArrayList params = arrlist_init(Param);
+    while (true) {
+        if (par->token.type != TKN_IDENTIFIER) {
+            break;
+        }
+        Param param = {0};
+        param.name = par->token.start;
+        param.name_len = par->token.len;
+        pop_token(par);
+
+        if (!expect_token(par, TKN_COLON)) {
+            arrlist_deinit(&params);
+            return ast_error(par, err_str("Failed to parse fn param"));
+        }
+
+        if (par->token.type != TKN_IDENTIFIER) {
+            arrlist_deinit(&params);
+            return ast_error(par, err_str("Failed to parse fn param type"));
+        }
+        param.type = par->token.start;
+        param.type_len = par->token.len;
+        pop_token(par);
+
+        arrlist_push(&params, Param, param);
+
+        if (par->token.type == TKN_COMMA) {
+            pop_token(par);
+        }
+    }
+
+    if (!expect_token(par, TKN_R_PAREN)) {
+        arrlist_deinit(&params);
+        return ast_error(par, err_str("Failed to parse fn decl"));
+    }
+
+    // TODO parse block
+    if (!expect_token(par, TKN_L_BRACE)) {
+        arrlist_deinit(&params);
+        return ast_error(par, err_str("Failed to parse fn decl block"));
+    }
+
+    ArrayList statements = arrlist_init(ASTRef);
+    while (true) {
+        if (par->token.type == TKN_R_BRACE) {
+            break;
+        }
+        
+        ASTRef stmt = parse_expression(par, 0);
+        if (!valid_ast(stmt)) {
+            arrlist_deinit(&params);
+            arrlist_deinit(&statements);
+            return ast_error(par, err_str("Failed to parse fn decl block"));
+        }
+
+        if (!expect_token(par, TKN_SEMICOLON)) {
+            arrlist_deinit(&params);
+            arrlist_deinit(&statements);
+            return ast_error(par, err_str("Failed to parse expression"));
+        }
+
+        arrlist_push(&statements, ASTRef, stmt);
+    }
+
+    if (!expect_token(par, TKN_R_BRACE)) {
+        arrlist_deinit(&params);
+        arrlist_deinit(&statements);
+        return ast_error(par, err_str("Failed to parse fn decl block"));
+    }
+
+    FunctionDeclAST* fn = malloc(sizeof(FunctionDeclAST));
+    fn->name = name_token.start;
+    fn->name_len = name_token.len;
+    fn->params = arrlist_to_array(&params);
+    fn->params_len = params.len;
+    fn->statements = arrlist_to_array(&statements);
+    fn->statements_len = statements.len;
+
+    return (ASTRef){ .node = fn, .type = AST_FUNCTION_DECL, };
+}
+
 static void print_indent(size_t depth) {
     /*for (size_t i = 1; i < depth; i++) {
         printf("│   ");
@@ -537,6 +633,34 @@ static void print_index(const IndexAST* index, size_t depth) {
     printf("}\n");
 }
 
+static void print_param(const Param* param, size_t depth) {
+    printf("Param {\n");
+    print_indent(depth + 1);
+    printf("name = %.*s\n", (int)param->name_len, param->name);
+    print_indent(depth + 1);
+    printf("type = %.*s\n", (int)param->type_len, param->type);
+    print_indent(depth);
+    printf("}\n");
+}
+
+static void print_function_decl(const FunctionDeclAST* fn_decl, size_t depth) {
+    printf("FunctionDecl {\n");
+    print_indent(depth + 1);
+    printf("name = %.*s\n", (int)fn_decl->name_len, fn_decl->name);
+    for (size_t i = 0; i < fn_decl->params_len; i++) {
+        print_indent(depth + 1);
+        printf("params[%zu] = ", i);
+        print_param(&fn_decl->params[i], depth + 1);
+    }
+    for (size_t i = 0; i < fn_decl->statements_len; i++) {
+        print_indent(depth + 1);
+        printf("statements[%zu] = ", i);
+        print_ast(fn_decl->statements[i], depth + 1);
+    }
+    print_indent(depth);
+    printf("}\n");
+}
+
 void print_ast(ASTRef ast, size_t depth) {
     switch (ast.type) {
         case AST_LITERAL: print_literal(ast.node); return;
@@ -562,6 +686,8 @@ void print_ast(ASTRef ast, size_t depth) {
         case AST_ACCESS: print_access(ast.node, depth); return;
         case AST_CALL: print_call(ast.node, depth); return;
         case AST_INDEX: print_index(ast.node, depth); return;
+
+        case AST_FUNCTION_DECL: print_function_decl(ast.node, depth); return;
 
         case AST__NULL: printf("NULL\n"); return;
         case AST__COUNT: printf("COUNT\n"); return;
