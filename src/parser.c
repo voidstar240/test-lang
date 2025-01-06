@@ -454,7 +454,57 @@ ASTRef parse_expression(Parser* par, int8_t rbp) {
     return left;
 }
 
-// TODO make parse_expression fn
+static ASTRef parse_var_decl(Parser* par) {
+    if (!expect_token(par, TKN_VAR)) {
+        return ast_error(par, err_str("Failed to parse var decl"));
+    }
+
+    Token name = par->token;
+    if (!expect_token(par, TKN_IDENTIFIER)) {
+        return ast_error(par, err_str("Failed to parse var decl"));
+    }
+
+    Token type = {0};
+    if (par->token.type == TKN_COLON) {
+        pop_token(par);
+        type = par->token;
+        if (!expect_token(par, TKN_IDENTIFIER)) {
+            return ast_error(par, err_str("Failed to parse var decl"));
+        }
+    }
+
+    if (!expect_token(par, TKN_EQUAL)) {
+        return ast_error(par, err_str("Failed to parse var decl"));
+    }
+    ASTRef expr = parse_expression(par, 0);
+    if (!valid_ast(expr)) {
+        return ast_error(par, err_str("Failed to parse var decl expr"));
+    }
+
+    VarDeclAST* var_decl = malloc(sizeof(VarDeclAST));
+    var_decl->name = name.start;
+    var_decl->name_len = name.len;
+    var_decl->type = type.start;
+    var_decl->type_len = type.len;
+    var_decl->expr = expr;
+
+    return (ASTRef) { .node = var_decl, .type = AST_VAR_DECL };
+}
+
+ASTRef parse_statement(Parser* par) {
+    ASTRef inner;
+    if (par->token.type == TKN_VAR) {
+        inner = parse_var_decl(par);
+    } else {
+        inner = parse_expression(par, 0);
+    }
+
+    // TODO possible sync point?
+    if (!expect_token(par, TKN_SEMICOLON)) {
+        return (ASTRef){0};
+    }
+    return inner;
+}
 
 ASTRef parse_function_decl(Parser* par) {
     if (!expect_token(par, TKN_FN)) {
@@ -505,7 +555,6 @@ ASTRef parse_function_decl(Parser* par) {
         return ast_error(par, err_str("Failed to parse fn decl"));
     }
 
-    // TODO parse block
     if (!expect_token(par, TKN_L_BRACE)) {
         arrlist_deinit(&params);
         return ast_error(par, err_str("Failed to parse fn decl block"));
@@ -517,17 +566,11 @@ ASTRef parse_function_decl(Parser* par) {
             break;
         }
         
-        ASTRef stmt = parse_expression(par, 0);
+        ASTRef stmt = parse_statement(par);
         if (!valid_ast(stmt)) {
             arrlist_deinit(&params);
             arrlist_deinit(&statements);
             return ast_error(par, err_str("Failed to parse fn decl block"));
-        }
-
-        if (!expect_token(par, TKN_SEMICOLON)) {
-            arrlist_deinit(&params);
-            arrlist_deinit(&statements);
-            return ast_error(par, err_str("Failed to parse expression"));
         }
 
         arrlist_push(&statements, ASTRef, stmt);
@@ -661,6 +704,19 @@ static void print_function_decl(const FunctionDeclAST* fn_decl, size_t depth) {
     printf("}\n");
 }
 
+static void print_var_decl(const VarDeclAST* var_decl, size_t depth) {
+    printf("VarDecl {\n");
+    print_indent(depth + 1);
+    printf("name = %.*s\n", (int)var_decl->name_len, var_decl->name);
+    print_indent(depth + 1);
+    printf("type = %.*s\n", (int)var_decl->type_len, var_decl->type);
+    print_indent(depth + 1);
+    printf("expr = ");
+    print_ast(var_decl->expr, depth + 1);
+    print_indent(depth);
+    printf("}\n");
+}
+
 void print_ast(ASTRef ast, size_t depth) {
     switch (ast.type) {
         case AST_LITERAL: print_literal(ast.node); return;
@@ -688,6 +744,7 @@ void print_ast(ASTRef ast, size_t depth) {
         case AST_INDEX: print_index(ast.node, depth); return;
 
         case AST_FUNCTION_DECL: print_function_decl(ast.node, depth); return;
+        case AST_VAR_DECL: print_var_decl(ast.node, depth); return;
 
         case AST__NULL: printf("NULL\n"); return;
         case AST__COUNT: printf("COUNT\n"); return;
