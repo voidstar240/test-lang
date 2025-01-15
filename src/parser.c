@@ -555,6 +555,14 @@ ASTRef parse_function_decl(Parser* par) {
         return ast_error(par, err_str("Failed to parse fn decl"));
     }
 
+    const char* ret_type = NULL;
+    size_t ret_type_len = 0;
+    if (par->token.type == TKN_IDENTIFIER) {
+        ret_type = par->token.start;
+        ret_type_len = par->token.len;
+        pop_token(par);
+    }
+
     if (!expect_token(par, TKN_L_BRACE)) {
         arrlist_deinit(&params);
         return ast_error(par, err_str("Failed to parse fn decl block"));
@@ -587,6 +595,8 @@ ASTRef parse_function_decl(Parser* par) {
     fn->name_len = name_token.len;
     fn->params = arrlist_to_array(&params);
     fn->params_len = params.len;
+    fn->ret_type = ret_type;
+    fn->ret_type_len = ret_type_len;
     fn->statements = arrlist_to_array(&statements);
     fn->statements_len = statements.len;
 
@@ -695,6 +705,13 @@ static void print_function_decl(const FunctionDeclAST* fn_decl, size_t depth) {
         printf("params[%zu] = ", i);
         print_param(&fn_decl->params[i], depth + 1);
     }
+    print_indent(depth + 1);
+    if (fn_decl->ret_type_len != 0) {
+        printf("ret_type = %.*s\n", (int)fn_decl->ret_type_len, fn_decl->ret_type);
+    } else {
+        printf("ret_type = VOID\n");
+    }
+
     for (size_t i = 0; i < fn_decl->statements_len; i++) {
         print_indent(depth + 1);
         printf("statements[%zu] = ", i);

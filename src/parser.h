@@ -92,6 +92,8 @@ typedef struct {
     size_t name_len;
     Param* params;
     size_t params_len;
+    const char* ret_type;
+    size_t ret_type_len;
     ASTRef* statements;
     size_t statements_len;
 } FunctionDeclAST;
