@@ -1,10 +1,13 @@
+#ifndef ARRAY_LIST_H
+#define ARRAY_LIST_H
+
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
 #define arrlist_get(arr, Type, index) (((Type*)(arr)->data)[index])
 #define arrlist_init(Type) ((ArrayList){ .data = NULL, .len = 0, .cap = 0, .elem_size = sizeof(Type) })
-#define arrlist_push(arr, Type, val) (*(Type*)arrlist_append((arr), 1) = val)
+#define arrlist_push(arr, Type, val) (*(Type*)arrlist_append((arr), 1) = (val))
 
 typedef struct {
     void* data;
@@ -32,8 +35,19 @@ void arrlist_shrink(ArrayList* arr);
 // Removes count elements from the ArrayList starting at index.
 void arrlist_remove(ArrayList* arr, size_t index, size_t count);
 
+// Removes count elements from end of ArrayList.
+static inline void arrlist_pop(ArrayList* arr, size_t count) {
+    if (count > arr->len) {
+        arr->len = 0;
+    } else {
+        arr->len -= count;
+    }
+}
+
 // Shrinks the allocation of the data to the same size as the length and returns
 // a pointer to it.
 static inline void* arrlist_to_array(ArrayList* arr) {
     return realloc(arr->data, arr->len * arr->elem_size);
 }
+
+#endif
