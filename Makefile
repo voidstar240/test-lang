@@ -4,6 +4,8 @@ EXEC := lang
 SRCS := $(wildcard src/*.c)
 OBJS := $(patsubst src%,obj%, $(patsubst %.c,%.o, $(SRCS)))
 
+LIBS := -lLLVM-19
+
 CFLAGS := -Wall -pedantic -Werror=incompatible-pointer-types-discards-qualifiers -std=c99 -g -O0
 CC := clang
 
@@ -11,7 +13,7 @@ all: $(EXEC) db
 
 # Link object files to create executable
 $(EXEC): $(OBJS)
-	$(CC) $(CFLAGS) $(OBJS) -o $(EXEC)
+	$(CC) $(CFLAGS) $(OBJS) -o $(EXEC) $(LIBS)
 
 # Compile all *.c files to *.o
 obj/%.o: src/%.c

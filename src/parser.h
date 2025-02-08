@@ -36,6 +36,7 @@ typedef enum {
 
     AST_FUNCTION_DECL,
     AST_VAR_DECL,
+    AST_RETURN,
 
     AST__COUNT,
     AST__MAX = 0xff,
@@ -105,6 +106,10 @@ typedef struct {
     size_t type_len;
     ASTRef expr;
 } VarDeclAST;
+
+typedef struct {
+    ASTRef expr;
+} ReturnAST;
 
 static inline bool valid_ast(ASTRef ast) {
     return (ast.type != AST__NULL) && (ast.node != NULL);

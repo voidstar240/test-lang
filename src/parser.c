@@ -491,10 +491,28 @@ static ASTRef parse_var_decl(Parser* par) {
     return (ASTRef) { .node = var_decl, .type = AST_VAR_DECL };
 }
 
+static ASTRef parse_return(Parser* par) {
+    if (!expect_token(par, TKN_RETURN)) {
+        return (ASTRef){0};
+    }
+    ASTRef expr = parse_expression(par, 0);
+    if (!valid_ast(expr)) {
+        return (ASTRef){0};
+    }
+    ReturnAST* ast = malloc(sizeof(ReturnAST));
+    ast->expr = expr;
+    return (ASTRef){
+        .type = AST_RETURN,
+        .node = ast,
+    };
+}
+
 ASTRef parse_statement(Parser* par) {
     ASTRef inner;
     if (par->token.type == TKN_VAR) {
         inner = parse_var_decl(par);
+    } else if (par->token.type == TKN_RETURN) {
+        inner = parse_return(par);
     } else {
         inner = parse_expression(par, 0);
     }
@@ -734,6 +752,15 @@ static void print_var_decl(const VarDeclAST* var_decl, size_t depth) {
     printf("}\n");
 }
 
+static void print_return(const ReturnAST* ret, size_t depth) {
+    printf("Return {\n");
+    print_indent(depth + 1);
+    printf("expr = ");
+    print_ast(ret->expr, depth + 1);
+    print_indent(depth);
+    printf("}\n");
+}
+
 void print_ast(ASTRef ast, size_t depth) {
     switch (ast.type) {
         case AST_LITERAL: print_literal(ast.node); return;
@@ -762,6 +789,7 @@ void print_ast(ASTRef ast, size_t depth) {
 
         case AST_FUNCTION_DECL: print_function_decl(ast.node, depth); return;
         case AST_VAR_DECL: print_var_decl(ast.node, depth); return;
+        case AST_RETURN: print_return(ast.node, depth); return;
 
         case AST__NULL: printf("NULL\n"); return;
         case AST__COUNT: printf("COUNT\n"); return;

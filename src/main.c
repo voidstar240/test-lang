@@ -6,6 +6,7 @@
 
 #include "scanner.h"
 #include "parser.h"
+#include "codegen.h"
 
 int interp(const char* data, size_t len) {
     Scanner scnr = scnr_init(data, len);
@@ -16,6 +17,9 @@ int interp(const char* data, size_t len) {
         printf("No Errors\n\n");
         printf("Syntax Tree:\n");
         print_ast(fn_decl, 0);
+        CodeGen cg = codegen_init();
+        codegen_init_prim_types(&cg);
+        gen_function(&cg, fn_decl.node);
         return 0;
     } else {
         printf("%zu ERRORS:\n", par.errs.len);
