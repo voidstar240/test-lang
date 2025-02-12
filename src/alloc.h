@@ -22,10 +22,10 @@ static inline void alloc_dealloc(Alloc* alloc, void* ptr, size_t size) {
     alloc->dealloc(alloc, ptr, size);
 }
 
-Alloc alloc_sys_init(void);
+Alloc* alloc_system(void);
 
 typedef struct {
-    Alloc _alloc;
+    Alloc _alloc; // TODO ptr to vtable instead?
     Alloc* parent;
     void* start;
     void* next;

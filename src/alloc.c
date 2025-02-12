@@ -17,12 +17,14 @@ static void free_wrapper(Alloc* alloc, void* ptr, size_t size) {
     free(ptr);
 }
 
-Alloc alloc_sys_init(void) {
-    return (Alloc) {
-        .alloc = malloc_wrapper,
-        .realloc = realloc_wrapper,
-        .dealloc = free_wrapper,
-    };
+Alloc alloc_system_internal = (Alloc) {
+    .alloc = malloc_wrapper,
+    .realloc = realloc_wrapper,
+    .dealloc = free_wrapper,
+};
+
+Alloc* alloc_system(void) {
+    return &alloc_system_internal;
 }
 
 static inline bool arena_is_last(ArenaAlloc* arena, void* ptr, size_t size) {
@@ -58,7 +60,7 @@ static void arena_dealloc_inner(Alloc* alloc, void* ptr, size_t size) {
     arena->next = ptr;
 }
 
-ArenaAlloc alloc_arena_create(Alloc* alloc, size_t capacity) {
+ArenaAlloc alloc_arena_init(Alloc* alloc, size_t capacity) {
     void* block = alloc->alloc(alloc, capacity);
     return (ArenaAlloc) {
         ._alloc = (Alloc) {
@@ -73,6 +75,6 @@ ArenaAlloc alloc_arena_create(Alloc* alloc, size_t capacity) {
     };
 }
 
-void alloc_arena_destroy(ArenaAlloc* arena) {
+void alloc_arena_deinit(ArenaAlloc* arena) {
     arena->parent->dealloc(arena->parent, arena->start, arena->capacity);
 }
