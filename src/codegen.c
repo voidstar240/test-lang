@@ -160,7 +160,6 @@ void gen_function(CodeGen* cg, FunctionDeclAST* fn_ast) {
         printf("\nERROR: INVALID RETURN TYPE %.*s\n\n", (int)fn_ast->ret_type.len, fn_ast->ret_type.cstr);
         return;
     }
-    ret_type = LLVMInt32TypeInContext(cg->ctx);
 
     // construct function type
     LLVMTypeRef fn_type = LLVMFunctionType(ret_type, param_types, fn_ast->params_len, 0);
@@ -183,7 +182,7 @@ void gen_function(CodeGen* cg, FunctionDeclAST* fn_ast) {
     }
 
     LLVMBool out = LLVMVerifyModule(cg->mod, LLVMPrintMessageAction, NULL);
-    printf("VERIFY ERROR: %d\n\n", out);
+    printf("\nVERIFY ERROR: %d\n\n", out);
     char* mod_str = LLVMPrintModuleToString(cg->mod);
     printf("MODULE:\n%s\n\n", mod_str);
 }
