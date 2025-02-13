@@ -6,6 +6,8 @@
 
 #include "scanner.h"
 #include "array_list.h"
+#include "alloc.h"
+#include "str.h"
 
 typedef enum {
     AST__NULL,
@@ -52,8 +54,7 @@ typedef struct {
 } LiteralAST;
 
 typedef struct {
-    const char* bytes;
-    size_t len;
+    Str name;
 } SymbolAST;
 
 typedef struct {
@@ -82,28 +83,22 @@ typedef struct {
 } AccessAST;
 
 typedef struct {
-    const char* name;
-    size_t name_len;
-    const char* type;
-    size_t type_len;
+    Str name;
+    Str type;
 } Param;
 
 typedef struct {
-    const char* name;
-    size_t name_len;
+    Str name;
     Param* params;
     size_t params_len;
-    const char* ret_type;
-    size_t ret_type_len;
+    Str ret_type;
     ASTRef* statements;
     size_t statements_len;
 } FunctionDeclAST;
 
 typedef struct {
-    const char* name;
-    size_t name_len;
-    const char* type;
-    size_t type_len;
+    Str name;
+    Str type;
     ASTRef expr;
 } VarDeclAST;
 
@@ -155,13 +150,17 @@ typedef struct {
     Scanner* scnr;
     Token token;
     ArrayList errs;
+    Alloc* str_alloc;
+    Alloc* node_alloc;
 } Parser;
 
-static inline Parser parser_init(Scanner* scnr) {
+static inline Parser parser_init(Scanner* scnr, Alloc* str_alloc, Alloc* node_alloc) {
     return (Parser){
         .scnr = scnr,
         .token = scnr_scan_token(scnr),
         .errs = arrlist_init(ParseError),
+        .str_alloc = str_alloc,
+        .node_alloc = node_alloc,
     };
 }
 

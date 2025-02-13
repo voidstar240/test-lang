@@ -7,24 +7,6 @@
 #include "codegen.h"
 #include "parser.h"
 
-static LLVMTypeRef get_type(CodeGen* cg, const char* name, size_t len) {
-    char* tmp = malloc(len + 1);
-    tmp[len] = '\0';
-    memcpy(tmp, name, len);
-    const LLVMTypeRef ref = type_map_get(&cg->types, tmp);
-    free(tmp);
-    return ref;
-}
-
-static LLVMValueRef get_val(CodeGen* cg, const char* name, size_t len) {
-    char* tmp = malloc(len + 1);
-    tmp[len] = '\0';
-    memcpy(tmp, name, len);
-    const LLVMValueRef ref = symmap_get(&cg->symbols, tmp);
-    free(tmp);
-    return ref;
-}
-
 LLVMTypeRef type_map_get(TypeMap* tm, const char* name) {
     struct Pair {
         const char* name;
@@ -71,9 +53,9 @@ static LLVMValueRef gen_literal(CodeGen* cg, LiteralAST* lit) {
 }
 
 static LLVMValueRef gen_symbol(CodeGen* cg, SymbolAST* sym) {
-    const LLVMValueRef val = get_val(cg, sym->bytes, sym->len);
+    const LLVMValueRef val = symmap_get(&cg->symbols, sym->name.cstr);
     if (val == (LLVMValueRef){0}) {
-        printf("\nERROR: NO VALUE FOR %.*s\n\n", (int)sym->len, sym->bytes);
+        printf("\nERROR: NO VALUE FOR %.*s\n\n", (int)sym->name.len, sym->name.cstr);
     }
     return val;
 }
@@ -133,18 +115,18 @@ void gen_function(CodeGen* cg, FunctionDeclAST* fn_ast) {
     // get param types
     LLVMTypeRef* param_types = calloc(fn_ast->params_len, sizeof(LLVMTypeRef));
     for (size_t i = 0; i < fn_ast->params_len; i++) {
-        const LLVMTypeRef type = get_type(cg, fn_ast->params[i].type, fn_ast->params[i].type_len);
+        const LLVMTypeRef type = type_map_get(&cg->types, fn_ast->params[i].type.cstr);
         if (type == (LLVMTypeRef){0}) {
-            printf("\nERROR: INVALID TYPE %.*s\n\n", (int)fn_ast->params[i].type_len, fn_ast->params[i].type);
+            printf("\nERROR: INVALID TYPE %.*s\n\n", (int)fn_ast->params[i].type.len, fn_ast->params[i].type.cstr);
             return;
         }
         param_types[i] = type;
     }
 
     // get return type
-    LLVMTypeRef ret_type = get_type(cg, fn_ast->ret_type, fn_ast->ret_type_len);
+    LLVMTypeRef ret_type = type_map_get(&cg->types, fn_ast->ret_type.cstr);
     if (ret_type == (LLVMTypeRef){0}) {
-        printf("\nERROR: INVALID RETURN TYPE %.*s\n\n", (int)fn_ast->ret_type_len, fn_ast->ret_type);
+        printf("\nERROR: INVALID RETURN TYPE %.*s\n\n", (int)fn_ast->ret_type.len, fn_ast->ret_type.cstr);
         return;
     }
     ret_type = LLVMInt32TypeInContext(cg->ctx);
@@ -153,17 +135,11 @@ void gen_function(CodeGen* cg, FunctionDeclAST* fn_ast) {
     LLVMTypeRef fn_type = LLVMFunctionType(ret_type, param_types, fn_ast->params_len, 0);
 
     // register function
-    char* fn_name = malloc(fn_ast->name_len + 1);
-    fn_name[fn_ast->name_len] = '\0';
-    memcpy(fn_name, fn_ast->name, fn_ast->name_len);
-    LLVMValueRef fn = LLVMAddFunction(cg->mod, fn_name, fn_type);
+    LLVMValueRef fn = LLVMAddFunction(cg->mod, fn_ast->name.cstr, fn_type);
 
     // add params to symbol map
     for (size_t i = 0; i < fn_ast->params_len; i++) {
-        char* name = malloc(fn_ast->params[i].name_len + 1);
-        name[fn_ast->params[i].name_len] = '\0';
-        memcpy(name, fn_ast->params[i].name, fn_ast->params[i].name_len);
-        symmap_push(&cg->symbols, name, LLVMGetParam(fn, i));
+        symmap_push(&cg->symbols, fn_ast->params[i].name.cstr, LLVMGetParam(fn, i));
     }
 
     LLVMBasicBlockRef entry = LLVMAppendBasicBlockInContext(cg->ctx, fn, "entry");

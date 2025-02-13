@@ -128,17 +128,16 @@ static int64_t int_from_str(const char* bytes, size_t len) {
 }
 
 LiteralAST* parse_literal(Parser* par) {
-    LiteralAST* lit = malloc(sizeof(LiteralAST));
+    LiteralAST* lit = alloc_alloc(par->node_alloc, sizeof(LiteralAST));
     lit->number = int_from_str(par->token.start, par->token.len);
     pop_token(par);
     return lit;
 }
 
 SymbolAST* parse_symbol(Parser* par) {
-    SymbolAST* sym = malloc(sizeof(SymbolAST));
+    SymbolAST* sym = alloc_alloc(par->node_alloc, sizeof(SymbolAST));
     Token ident = pop_token(par);
-    sym->bytes = ident.start;
-    sym->len = ident.len;
+    sym->name = str_alloc(par->str_alloc, ident.start, ident.len);
     return sym;
 }
 
@@ -279,15 +278,6 @@ static ASTType type_of_prefix(PrefixOp op) {
     }
 }
 
-static ASTRef make_unary(PrefixOp op, ASTRef inner) {
-    ASTRef expr;
-    expr.type = type_of_prefix(op);
-    UnaryAST* un = malloc(sizeof(UnaryAST));
-    expr.node = un;
-    un->inner = inner;
-    return expr;
-}
-
 static ASTRef parse_nud(Parser* par) {
     PrefixOp op = prefix_op_of(par->token.type);
     if (op) {
@@ -296,7 +286,12 @@ static ASTRef parse_nud(Parser* par) {
         if (!valid_ast(expr)) {
             return ast_error(par, err_str("Expr. parse failed."));
         }
-        return make_unary(op, expr);
+        UnaryAST* unary = alloc_alloc(par->node_alloc, sizeof(UnaryAST));
+        unary->inner = expr;
+        return (ASTRef) {
+            .type = type_of_prefix(op),
+            .node = unary,
+        };
     }
     switch (par->token.type) {
         case TKN_NUMBER:
@@ -340,16 +335,6 @@ static ASTType type_of_infix(InfixOp op) {
     }
 }
 
-static ASTRef make_binary(InfixOp op, ASTRef lhs, ASTRef rhs) {
-    ASTRef expr;
-    expr.type = type_of_infix(op);
-    BinaryAST* bin = malloc(sizeof(BinaryAST));
-    expr.node = bin;
-    bin->lhs = lhs;
-    bin->rhs = rhs;
-    return expr;
-}
-
 static ASTRef parse_call(Parser* par, ASTRef callee) {
     ArrayList args = arrlist_init(ASTRef);
     while (true) {
@@ -371,7 +356,7 @@ static ASTRef parse_call(Parser* par, ASTRef callee) {
         }
     }
 
-    CallAST* call = malloc(sizeof(CallAST));
+    CallAST* call = alloc_alloc(par->node_alloc, sizeof(CallAST));
     call->callee = callee;
     call->args = (ASTRef*)arrlist_to_array(&args);
     call->args_len = args.len;
@@ -383,7 +368,7 @@ static ASTRef parse_call(Parser* par, ASTRef callee) {
 }
 
 static ASTRef parse_index(Parser* par, ASTRef item) {
-    IndexAST* index = malloc(sizeof(IndexAST));
+    IndexAST* index = alloc_alloc(par->node_alloc, sizeof(IndexAST));
     index->item = item;
     index->index = parse_expression(par, 0);
     if (!expect_token(par, TKN_R_BRACKET)) { return (ASTRef){0}; }
@@ -401,7 +386,7 @@ static ASTRef parse_access(Parser* par, ASTRef parent) {
         err.data.unexpected.expected[0] = TKN_IDENTIFIER;
         return ast_error(par, err);
     }
-    AccessAST* acc = malloc(sizeof(AccessAST));
+    AccessAST* acc = alloc_alloc(par->node_alloc, sizeof(AccessAST));
     acc->parent = parent;
     acc->child = parse_symbol(par);
     return (ASTRef){
@@ -423,7 +408,14 @@ static ASTRef parse_led(Parser* par, ASTRef left, int8_t lbp) {
     if (!valid_ast(rhs)) {
         return ast_error(par, err_str("Failed to parse expression."));
     }
-    return make_binary(op, left, rhs);
+
+    BinaryAST* bin = malloc(sizeof(BinaryAST));
+    bin->lhs = left;
+    bin->rhs = rhs;
+    return (ASTRef) {
+        .type = type_of_infix(op),
+        .node = bin,
+    };
 }
 
 ASTRef parse_expression(Parser* par, int8_t rbp) {
@@ -481,11 +473,9 @@ static ASTRef parse_var_decl(Parser* par) {
         return ast_error(par, err_str("Failed to parse var decl expr"));
     }
 
-    VarDeclAST* var_decl = malloc(sizeof(VarDeclAST));
-    var_decl->name = name.start;
-    var_decl->name_len = name.len;
-    var_decl->type = type.start;
-    var_decl->type_len = type.len;
+    VarDeclAST* var_decl = alloc_alloc(par->node_alloc, sizeof(VarDeclAST));
+    var_decl->name = str_alloc(par->str_alloc, name.start, name.len);
+    var_decl->type = str_alloc(par->str_alloc, type.start, type.len);
     var_decl->expr = expr;
 
     return (ASTRef) { .node = var_decl, .type = AST_VAR_DECL };
@@ -499,7 +489,7 @@ static ASTRef parse_return(Parser* par) {
     if (!valid_ast(expr)) {
         return (ASTRef){0};
     }
-    ReturnAST* ast = malloc(sizeof(ReturnAST));
+    ReturnAST* ast = alloc_alloc(par->node_alloc, sizeof(ReturnAST));
     ast->expr = expr;
     return (ASTRef){
         .type = AST_RETURN,
@@ -544,8 +534,7 @@ ASTRef parse_function_decl(Parser* par) {
             break;
         }
         Param param = {0};
-        param.name = par->token.start;
-        param.name_len = par->token.len;
+        param.name = str_alloc(par->str_alloc, par->token.start, par->token.len);
         pop_token(par);
 
         if (!expect_token(par, TKN_COLON)) {
@@ -557,8 +546,7 @@ ASTRef parse_function_decl(Parser* par) {
             arrlist_deinit(&params);
             return ast_error(par, err_str("Failed to parse fn param type"));
         }
-        param.type = par->token.start;
-        param.type_len = par->token.len;
+        param.type = str_alloc(par->str_alloc, par->token.start, par->token.len);
         pop_token(par);
 
         arrlist_push(&params, Param, param);
@@ -573,11 +561,9 @@ ASTRef parse_function_decl(Parser* par) {
         return ast_error(par, err_str("Failed to parse fn decl"));
     }
 
-    const char* ret_type = NULL;
-    size_t ret_type_len = 0;
+    Str ret_type = str_lit("");
     if (par->token.type == TKN_IDENTIFIER) {
-        ret_type = par->token.start;
-        ret_type_len = par->token.len;
+        ret_type = str_alloc(par->str_alloc, par->token.start, par->token.len);
         pop_token(par);
     }
 
@@ -608,13 +594,11 @@ ASTRef parse_function_decl(Parser* par) {
         return ast_error(par, err_str("Failed to parse fn decl block"));
     }
 
-    FunctionDeclAST* fn = malloc(sizeof(FunctionDeclAST));
-    fn->name = name_token.start;
-    fn->name_len = name_token.len;
+    FunctionDeclAST* fn = alloc_alloc(par->node_alloc, sizeof(FunctionDeclAST));
+    fn->name = str_alloc(par->str_alloc, name_token.start, name_token.len);
     fn->params = arrlist_to_array(&params);
     fn->params_len = params.len;
     fn->ret_type = ret_type;
-    fn->ret_type_len = ret_type_len;
     fn->statements = arrlist_to_array(&statements);
     fn->statements_len = statements.len;
 
@@ -642,7 +626,7 @@ static void print_literal(const LiteralAST* lit) {
 }
 
 static void print_symbol(const SymbolAST* sym) {
-    printf("Symbol { \"%.*s\" }\n", (int)sym->len, sym->bytes);
+    printf("Symbol { \"%.*s\" }\n", (int)sym->name.len, sym->name.cstr);
 }
 
 static void print_unary(const UnaryAST* unary, const char* op_name, size_t depth) {
@@ -707,9 +691,9 @@ static void print_index(const IndexAST* index, size_t depth) {
 static void print_param(const Param* param, size_t depth) {
     printf("Param {\n");
     print_indent(depth + 1);
-    printf("name = %.*s\n", (int)param->name_len, param->name);
+    printf("name = %.*s\n", (int)param->name.len, param->name.cstr);
     print_indent(depth + 1);
-    printf("type = %.*s\n", (int)param->type_len, param->type);
+    printf("type = %.*s\n", (int)param->type.len, param->type.cstr);
     print_indent(depth);
     printf("}\n");
 }
@@ -717,15 +701,15 @@ static void print_param(const Param* param, size_t depth) {
 static void print_function_decl(const FunctionDeclAST* fn_decl, size_t depth) {
     printf("FunctionDecl {\n");
     print_indent(depth + 1);
-    printf("name = %.*s\n", (int)fn_decl->name_len, fn_decl->name);
+    printf("name = %.*s\n", (int)fn_decl->name.len, fn_decl->name.cstr);
     for (size_t i = 0; i < fn_decl->params_len; i++) {
         print_indent(depth + 1);
         printf("params[%zu] = ", i);
         print_param(&fn_decl->params[i], depth + 1);
     }
     print_indent(depth + 1);
-    if (fn_decl->ret_type_len != 0) {
-        printf("ret_type = %.*s\n", (int)fn_decl->ret_type_len, fn_decl->ret_type);
+    if (fn_decl->ret_type.len > 0) {
+        printf("ret_type = %.*s\n", (int)fn_decl->ret_type.len, fn_decl->ret_type.cstr);
     } else {
         printf("ret_type = VOID\n");
     }
@@ -742,9 +726,9 @@ static void print_function_decl(const FunctionDeclAST* fn_decl, size_t depth) {
 static void print_var_decl(const VarDeclAST* var_decl, size_t depth) {
     printf("VarDecl {\n");
     print_indent(depth + 1);
-    printf("name = %.*s\n", (int)var_decl->name_len, var_decl->name);
+    printf("name = %.*s\n", (int)var_decl->name.len, var_decl->name.cstr);
     print_indent(depth + 1);
-    printf("type = %.*s\n", (int)var_decl->type_len, var_decl->type);
+    printf("type = %.*s\n", (int)var_decl->type.len, var_decl->type.cstr);
     print_indent(depth + 1);
     printf("expr = ");
     print_ast(var_decl->expr, depth + 1);
