@@ -32,6 +32,7 @@ LLVMValueRef symmap_get(SymbolMap* sm, const char* name) {
 }
 
 void codegen_init_prim_types(CodeGen* cg) {
+    type_map_push(&cg->types, "bool", LLVMInt1TypeInContext(cg->ctx));
     type_map_push(&cg->types, "u8", LLVMInt8TypeInContext(cg->ctx));
     type_map_push(&cg->types, "i8", LLVMInt8TypeInContext(cg->ctx));
     type_map_push(&cg->types, "u16", LLVMInt16TypeInContext(cg->ctx));
@@ -66,6 +67,36 @@ static LLVMValueRef gen_add(CodeGen* cg, BinaryAST* bin) {
     return LLVMBuildAdd(cg->build, lhs, rhs, "addtmp");
 }
 
+static LLVMValueRef gen_sub(CodeGen* cg, BinaryAST* bin) {
+    LLVMValueRef lhs = gen_ast(cg, bin->lhs);
+    LLVMValueRef rhs = gen_ast(cg, bin->rhs);
+    return LLVMBuildSub(cg->build, lhs, rhs, "subtmp");
+}
+
+static LLVMValueRef gen_mul(CodeGen* cg, BinaryAST* bin) {
+    LLVMValueRef lhs = gen_ast(cg, bin->lhs);
+    LLVMValueRef rhs = gen_ast(cg, bin->rhs);
+    return LLVMBuildMul(cg->build, lhs, rhs, "multmp");
+}
+
+static LLVMValueRef gen_div(CodeGen* cg, BinaryAST* bin) {
+    LLVMValueRef lhs = gen_ast(cg, bin->lhs);
+    LLVMValueRef rhs = gen_ast(cg, bin->rhs);
+    return LLVMBuildSDiv(cg->build, lhs, rhs, "divtmp"); // TODO this needs more type info
+}
+
+static LLVMValueRef gen_mod(CodeGen* cg, BinaryAST* bin) {
+    LLVMValueRef lhs = gen_ast(cg, bin->lhs);
+    LLVMValueRef rhs = gen_ast(cg, bin->rhs);
+    return LLVMBuildSRem(cg->build, lhs, rhs, "modtmp"); // TODO this also needs more type info
+}
+
+static LLVMValueRef gen_cmp_eq(CodeGen* cg, LLVMIntPredicate op, BinaryAST* bin) {
+    LLVMValueRef lhs = gen_ast(cg, bin->lhs);
+    LLVMValueRef rhs = gen_ast(cg, bin->rhs);
+    return LLVMBuildICmp(cg->build, op, lhs, rhs, "cmptmp");
+}
+
 static LLVMValueRef gen_return(CodeGen* cg, ReturnAST* ret) {
     return LLVMBuildRet(cg->build, gen_ast(cg, ret->expr));
 }
@@ -81,17 +112,17 @@ static LLVMValueRef gen_ast(CodeGen* cg, ASTRef ast) {
         //case AST_UNARY_NEGATE: break;
 
         //case AST_BINARY_ASSIGN: break;
-        //case AST_BINARY_EQUAL: break;
-        //case AST_BINARY_NOT_EQUAL: break;
-        //case AST_BINARY_LESS: break;
-        //case AST_BINARY_LESS_EQUAL: break;
-        //case AST_BINARY_GREATER: break;
-        //case AST_BINARY_GREATER_EQUAL: break;
+        case AST_BINARY_EQUAL:         return gen_cmp_eq(cg, LLVMIntEQ, ast.node);
+        case AST_BINARY_NOT_EQUAL:     return gen_cmp_eq(cg, LLVMIntNE, ast.node);
+        case AST_BINARY_LESS:          return gen_cmp_eq(cg, LLVMIntSLT, ast.node);
+        case AST_BINARY_LESS_EQUAL:    return gen_cmp_eq(cg, LLVMIntSLE, ast.node);
+        case AST_BINARY_GREATER:       return gen_cmp_eq(cg, LLVMIntSGT, ast.node);
+        case AST_BINARY_GREATER_EQUAL: return gen_cmp_eq(cg, LLVMIntSGE, ast.node);
         case AST_BINARY_ADD: return gen_add(cg, ast.node);
-        //case AST_BINARY_SUB: break;
-        //case AST_BINARY_MUL: break;
-        //case AST_BINARY_DIV: break;
-        //case AST_BINARY_MOD: break;
+        case AST_BINARY_SUB: return gen_sub(cg, ast.node);
+        case AST_BINARY_MUL: return gen_mul(cg, ast.node);
+        case AST_BINARY_DIV: return gen_div(cg, ast.node);
+        case AST_BINARY_MOD: return gen_mod(cg, ast.node);
 
         //case AST_CALL: break;
         //case AST_INDEX: break;
