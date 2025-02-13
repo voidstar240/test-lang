@@ -304,6 +304,11 @@ static ASTRef parse_nud(Parser* par) {
                 .type = AST_SYMBOL,
                 .node = parse_symbol(par),
             };
+        case TKN_L_PAREN:
+            pop_token(par);
+            ASTRef expr = parse_expression(par, 0);
+            expect_token(par, TKN_R_PAREN);
+            return expr;
         default:;
             ParseError err = err_unexp(par->token, TKN_NUMBER);
             err.data.unexpected.expected[1] = TKN_IDENTIFIER;
