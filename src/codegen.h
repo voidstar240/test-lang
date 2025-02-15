@@ -72,6 +72,7 @@ static inline CodeGen codegen_init(void) {
 }
 
 void codegen_init_prim_types(CodeGen* cg);
+void codegen_init_module(CodeGen* cg, const char* name);
 
 void gen_function(CodeGen* cg, FunctionDeclAST* fn_ast);
 

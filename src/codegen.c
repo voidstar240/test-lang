@@ -47,6 +47,11 @@ void codegen_init_prim_types(CodeGen* cg) {
     type_map_push(&cg->types, "f64", LLVMDoubleTypeInContext(cg->ctx));
 }
 
+void codegen_init_module(CodeGen* cg, const char* name) {
+    cg->mod = LLVMModuleCreateWithNameInContext(name, cg->ctx);
+    cg->build = LLVMCreateBuilderInContext(cg->ctx);
+}
+
 static LLVMValueRef gen_ast(CodeGen* cg, ASTRef ast);
 
 static LLVMValueRef gen_literal(CodeGen* cg, LiteralAST* lit) {
@@ -140,9 +145,6 @@ static LLVMValueRef gen_ast(CodeGen* cg, ASTRef ast) {
 }
 
 void gen_function(CodeGen* cg, FunctionDeclAST* fn_ast) {
-    // TODO move context creation somewhere else. (also what is a module?)
-    cg->mod = LLVMModuleCreateWithNameInContext("mymod", cg->ctx);
-
     // get param types
     LLVMTypeRef* param_types = calloc(fn_ast->params_len, sizeof(LLVMTypeRef));
     for (size_t i = 0; i < fn_ast->params_len; i++) {
@@ -173,8 +175,6 @@ void gen_function(CodeGen* cg, FunctionDeclAST* fn_ast) {
     }
 
     LLVMBasicBlockRef entry = LLVMAppendBasicBlockInContext(cg->ctx, fn, "entry");
-    // TODO should builder be initialized here? (what is the scope of a builder?)
-    cg->build = LLVMCreateBuilderInContext(cg->ctx);
     LLVMPositionBuilderAtEnd(cg->build, entry);
 
     for (size_t i = 0; i < fn_ast->statements_len; i++) {

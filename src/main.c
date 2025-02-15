@@ -22,6 +22,7 @@ int interp(const char* data, size_t len) {
         print_ast(fn_decl, 0);
         CodeGen cg = codegen_init();
         codegen_init_prim_types(&cg);
+        codegen_init_module(&cg, "mymod");
         gen_function(&cg, fn_decl.node);
         return 0;
     } else {
