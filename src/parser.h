@@ -157,7 +157,7 @@ typedef struct {
 static inline Parser parser_init(Scanner* scnr, Alloc* str_alloc, Alloc* node_alloc) {
     return (Parser){
         .scnr = scnr,
-        .token = scnr_scan_token(scnr),
+        .token = scnr_next(scnr).token,
         .errs = arrlist_init(ParseError),
         .str_alloc = str_alloc,
         .node_alloc = node_alloc,

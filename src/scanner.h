@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef enum {
     TKN__NULL = 0,
@@ -38,42 +39,54 @@ typedef enum {
     TKN_CONST, TKN_ELSE, TKN_FALSE,  TKN_FN,   TKN_FOR,   TKN_IF,  TKN_NONE,
     TKN_ONES,  TKN_OR,   TKN_RETURN, TKN_TRUE, TKN_UNDEF, TKN_VAR, TKN_WHILE,
     TKN_ZEROS,
+
+    TKN_COMMENT_INLINE,
+    TKN_COMMENT_BLOCK,
 } TokenType;
 
 typedef struct {
-    TokenType type;
-    const char* start;
+    uint8_t type;
+    uint8_t _pad;
+    size_t start;
     size_t len;
-    size_t line;
-    size_t col;
 } Token;
 
+typedef enum {
+    TKNERR_UNEXPECTED,
+    TKNERR_OPEN_COMMENT,
+    TKNERR_OPEN_CHAR,
+    TKNERR_OPEN_STRING,
+    TKNERR_OPEN_IDENTIFIER,
+} TokenErrType;
+
 typedef struct {
-    const char* start;
-    const char* current;
-    size_t length;
-    size_t line;
-    size_t col;
+    uint8_t _null;
+    uint8_t err_type;
+    size_t start;
+} TokenErr;
+
+typedef union {
+    Token token;
+    TokenErr error;
+} TokenResult;
+
+static inline bool valid_tkn_res(TokenResult tkn_res) {
+    return tkn_res.token.type != TKN__NULL;
+}
+
+typedef struct {
+    const char* src;
+    size_t cur_index;
 } Scanner;
 
-static inline Scanner scnr_init(const char* data, size_t length) {
+static inline Scanner scnr_init(const char* src) {
     return (Scanner){
-        .start = data,
-        .current = data,
-        .length = length,
-        .line = 1,
-        .col = 1,
+        .src = src,
+        .cur_index = 0,
     };
 }
 
-static inline bool scnr_is_end(const Scanner* scnr) {
-    return scnr->current >= scnr->start + scnr->length;
-}
-
-// Skips whitespace and comments
-void scnr_skip_whitespace(Scanner* scnr);
-
-Token scnr_scan_token(Scanner* scnr);
+TokenResult scnr_next(Scanner* scnr);
 
 static inline const char* token_type_str(TokenType type) {
     switch (type) {
@@ -141,7 +154,8 @@ static inline const char* token_type_str(TokenType type) {
         case TKN_VAR: return "var";
         case TKN_WHILE: return "while";
         case TKN_ZEROS: return "zeros";
-        default: return "NO_NAME";
+        case TKN_COMMENT_INLINE: return "comment_inline";
+        case TKN_COMMENT_BLOCK: return "comment_block";
     }
 }
 

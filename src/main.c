@@ -10,7 +10,7 @@
 #include "codegen.h"
 
 int interp(const char* data, size_t len) {
-    Scanner scnr = scnr_init(data, len);
+    Scanner scnr = scnr_init(data);
     ArenaAlloc str_alloc = alloc_arena_init(alloc_system(), 1048576);
     ArenaAlloc node_alloc = alloc_arena_init(alloc_system(), 1048576);
     Parser par = parser_init(&scnr, (Alloc*)&str_alloc, (Alloc*)&node_alloc);

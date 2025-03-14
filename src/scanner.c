@@ -1,133 +1,38 @@
 #include "scanner.h"
-#include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 
-static inline bool scnr_is_last(const Scanner* scnr) {
-    return scnr->current + 1 >= scnr->start + scnr->length;
-}
+typedef struct {
+    TokenType type;
+    const char* str;
+} KeywordStringPair;
 
-static inline char scnr_peek(const Scanner* scnr) {
-    if (scnr_is_end(scnr)) { return '\0'; }
-    return scnr->current[0];
-}
+const KeywordStringPair pairs[] = {
+    { TKN_CONST, "const" },
+    { TKN_ELSE, "else" },
+    { TKN_FALSE, "false" },
+    { TKN_FN, "fn" },
+    { TKN_FOR, "for" },
+    { TKN_IF, "if" },
+    { TKN_NONE, "none" },
+    { TKN_ONES, "ones" },
+    { TKN_OR, "or" },
+    { TKN_RETURN, "return" },
+    { TKN_TRUE, "true" },
+    { TKN_UNDEF, "undef" },
+    { TKN_VAR, "var" },
+    { TKN_WHILE, "while" },
+    { TKN_ZEROS, "zeros" },
+};
 
-static inline char scnr_peek_next(const Scanner* scnr) {
-    if (scnr_is_last(scnr)) { return '\0'; }
-    return scnr->current[1];
-}
-
-static inline char scnr_advance(Scanner* scnr) {
-    if (scnr_is_end(scnr)) { return '\0'; }
-    const char c = *scnr->current;
-    scnr->current++;
-    return c;
-}
-
-static inline bool scnr_match(Scanner* scnr, char c) {
-    if (scnr_peek(scnr) != c) { return false; }
-    scnr->current++;
-    return true;
-}
-
-static void skip_line_comment_body(Scanner* scnr) {
-    while (true) {
-        switch (scnr_peek(scnr)) {
-            case '\n':
-            case '\0':
-                return;
-
-            default:
-                scnr->current++;
+static Token ident_to_keyword(const char* src, Token ident) {
+    for (size_t i = 0; i < sizeof(pairs)/sizeof(pairs[0]); i++) {
+        if (ident.len != strlen(pairs[i].str)) { continue; }
+        if (strncmp(pairs[i].str, &src[ident.start], ident.len) == 0) {
+            ident.type = pairs[i].type;
+            return ident;
         }
     }
-}
-
-static void skip_block_comment_body(Scanner* scnr) {
-    size_t depth = 1;
-    while (depth > 0){
-        switch (scnr_peek(scnr)) {
-            case '/':
-                if (scnr_peek_next(scnr) == '*') {
-                    depth++;
-                    scnr->current++;
-                    scnr->col++;
-                }
-                scnr->current++;
-                scnr->col++;
-                break;
-
-            case '*':
-                if (scnr_peek_next(scnr) == '/') {
-                    depth--;
-                    scnr->current++;
-                    scnr->col++;
-                }
-                scnr->current++;
-                scnr->col++;
-                break;
-
-            case '\n':
-                scnr->current++;
-                scnr->line++;
-                scnr->col = 1;
-                break;
-
-            case '\0': return;
-
-            default:
-                scnr->current++;
-                scnr->col++;
-                break;
-        }
-    }
-}
-
-void scnr_skip_whitespace(Scanner* scnr) {
-    while (true) {
-        switch (scnr_peek(scnr)) {
-            case '\n':
-                scnr->current++;
-                scnr->line++;
-                scnr->col = 1;
-                break;
-
-            case ' ':
-            case '\t':
-            case '\r':
-                scnr->current++;
-                scnr->col++;
-                break;
-                
-            case '/':
-                switch (scnr_peek_next(scnr)) {
-                    case '/': // LINE COMMENT
-                        scnr->current += 2;
-                        skip_line_comment_body(scnr);
-                        break;
-
-                    case '*': // BLOCK COMMENT
-                        scnr->current += 2;
-                        scnr->col += 2;
-                        skip_block_comment_body(scnr);
-                        break;
-                    default: return;
-                }
-                break;
-
-            default: return;
-        }
-    }
-}
-
-static Token mktoken(const Scanner* scnr, TokenType type) {
-    return (Token){
-        .type = type,
-        .start = scnr->start,
-        .len = (size_t)(scnr->current - scnr->start),
-        .col = scnr->col,
-        .line = scnr->line,
-    };
+    return ident;
 }
 
 static inline bool is_digit(char c) {
@@ -146,237 +51,231 @@ static inline bool is_identifier_char(char c) {
     return is_upper_case(c) || is_lower_case(c) || is_digit(c) || c == '_';
 }
 
-static Token scan_char(Scanner* scnr) {
-    bool esc = false;
-    while (true) {
-        switch (scnr_peek(scnr)) {
-            case '\0': return mktoken(scnr, TKN__NULL);
-            case '\n': return mktoken(scnr, TKN__NULL);
-            case '\\':
-                scnr->current++;
-                if (!esc) {
-                    esc = true;
-                } else {
-                    esc = false;
-                }
-                continue;
-            case '\'':
-                scnr->current++;
-                if (!esc) {
-                    return mktoken(scnr, TKN_CHAR);
-                }
-                esc = false;
-                continue;
-            default:
-                scnr->current++;
-                esc = false;
-                continue;
-        }
+static inline bool is_whitespace_char(char c) {
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
+static inline bool is_numeric_char(char c) {
+    return is_identifier_char(c) || c == '.';
+}
+
+static inline char advance(Scanner* scnr) {
+    return scnr->src[scnr->cur_index++];
+}
+
+static inline char peek(Scanner* scnr) {
+    return scnr->src[scnr->cur_index];
+}
+
+static bool match(Scanner* scnr, char c) {
+    if (peek(scnr) == c) {
+        scnr->cur_index++;
+        return true;
+    }
+    return false;
+}
+
+static inline void skip_whitespace(Scanner* scnr) {
+    while (is_whitespace_char(peek(scnr))) {
+        scnr->cur_index++;
     }
 }
 
-static Token scan_string(Scanner* scnr) {
+static inline bool advance_enclosed(Scanner* scnr, char encloser) {
     bool esc = false;
     while (true) {
-        switch (scnr_peek(scnr)) {
-            case '\0': return mktoken(scnr, TKN__NULL);
-            case '\n': return mktoken(scnr, TKN__NULL);
-            case '\\':
-                scnr->current++;
-                if (!esc) {
-                    esc = true;
-                } else {
-                    esc = false;
-                }
-                continue;
-            case '"':
-                scnr->current++;
-                if (!esc) {
-                    return mktoken(scnr, TKN_STRING);
-                }
-                esc = false;
-                continue;
-            default:
-                scnr->current++;
-                esc = false;
-                continue;
+        if (peek(scnr) == '\0' || peek(scnr) == '\n') {
+            return false;
         }
-    }
-}
-
-static Token scan_number(Scanner* scnr) {
-    const char first = scnr->start[0];
-    bool has_dec = first == '.';
-    bool has_exp = false;
-    if (first == '0') {
-        switch (scnr_peek(scnr)) {
-            case 'b':
-                scnr->current++;
-                // TODO scan binary number
-                return mktoken(scnr, TKN__NULL);
-            case 'o':
-                scnr->current++;
-                // TODO scan octal number
-                return mktoken(scnr, TKN__NULL);
-            case 'x':
-                scnr->current++;
-                // TODO scan hex number
-                return mktoken(scnr, TKN__NULL);
-        }
-    }
-    while (true) {
-        const char c = scnr_peek(scnr);
-        if (c == '.') {
-            if (has_dec) {
-                return mktoken(scnr, TKN_NUMBER);
-            } 
-            has_dec = true;
-            scnr->current++;
-        } else if (c == 'E') {
-            if (has_exp) { return mktoken(scnr, TKN_NUMBER); }
-            scnr->current++;
-            has_exp = true;
-            has_dec = true;
-            const char p = scnr_peek(scnr);
-            if (p == '-') {
-                if (!is_digit(scnr_peek_next(scnr))) {
-                    return mktoken(scnr, TKN_NUMBER);
-                }
-                scnr->current += 2;
-            } else if (is_digit(p)) {
-                scnr->current++;
-            } else {
-                return mktoken(scnr, TKN_NUMBER);
+        if (!esc) {
+            if (match(scnr, encloser)) {
+                break;
+            } else if (match(scnr, '\\')) {
+                esc = true;
             }
-        } else if (is_digit(c) || c == '_') {
-            scnr->current++;
         } else {
-            return mktoken(scnr, TKN_NUMBER);
+            esc = false;
+            scnr->cur_index++;
         }
     }
+    return true;
 }
 
-static Token ident_to_keyword(Token ident) {
-    typedef struct {
-        TokenType type;
-        char* str;
-    } KeywordStringPair;
-    const KeywordStringPair pairs[] = {
-        { TKN_CONST, "const" },
-        { TKN_ELSE, "else" },
-        { TKN_FALSE, "false" },
-        { TKN_FN, "fn" },
-        { TKN_FOR, "for" },
-        { TKN_IF, "if" },
-        { TKN_NONE, "none" },
-        { TKN_ONES, "ones" },
-        { TKN_OR, "or" },
-        { TKN_RETURN, "return" },
-        { TKN_TRUE, "true" },
-        { TKN_UNDEF, "undef" },
-        { TKN_VAR, "var" },
-        { TKN_WHILE, "while" },
-        { TKN_ZEROS, "zeros" },
-        { TKN__NULL, NULL }
+TokenResult scnr_next(Scanner* scnr) {
+    skip_whitespace(scnr);
+    Token tok = {
+        .type = 0,
+        ._pad = 0,
+        .start = scnr->cur_index,
+        .len = 0,
     };
-    const KeywordStringPair* pair = pairs;
-    for (; pair->type != TKN__NULL; pair++) {
-        if (ident.len != strlen(pair->str)) { continue; }
-        if (strncmp(pair->str, ident.start, ident.len) == 0) {
-            ident.type = pair->type;
-            return ident;
-        }
-    }
-    return ident;
-}
-
-static Token scan_identifier(Scanner* scnr) {
-    Token ident;
-    while (true) {
-        if (!is_identifier_char(scnr_peek(scnr))) {
-            ident = mktoken(scnr, TKN_IDENTIFIER);
-            break;
-        }
-        scnr->current++;
-    }
-    return ident_to_keyword(ident);
-}
-
-Token scnr_scan_token(Scanner* scnr) {
-    scnr->col += (size_t)(scnr->current - scnr->start);
-    scnr_skip_whitespace(scnr);
-    scnr->length -= (size_t)(scnr->current - scnr->start);
-    scnr->start = scnr->current;
-    const char c = scnr_advance(scnr);
+    const char c = advance(scnr);
     switch (c) {
-        case '\0': return mktoken(scnr, TKN_EOF);
-
-        case '(': return mktoken(scnr, TKN_L_PAREN);
-        case ')': return mktoken(scnr, TKN_R_PAREN);
-        case '{': return mktoken(scnr, TKN_L_BRACE);
-        case '}': return mktoken(scnr, TKN_R_BRACE);
-        case '[': return mktoken(scnr, TKN_L_BRACKET);
-        case ']': return mktoken(scnr, TKN_R_BRACKET);
-        case ',': return mktoken(scnr, TKN_COMMA);
-        case ':': return mktoken(scnr, TKN_COLON);
-        case ';': return mktoken(scnr, TKN_SEMICOLON);
-        case '?': return mktoken(scnr, TKN_QUESTION);
-
+        case '\0':
+            tok.type = TKN_EOF;
+            scnr->cur_index--; // avoid OOB access src
+            break;
+        case '(': tok.type = TKN_L_PAREN; break;
+        case ')': tok.type = TKN_R_PAREN; break;
+        case '{': tok.type = TKN_L_BRACE; break;
+        case '}': tok.type = TKN_R_BRACE; break;
+        case '[': tok.type = TKN_L_BRACKET; break;
+        case ']': tok.type = TKN_R_BRACKET; break;
+        case ',': tok.type = TKN_COMMA; break;
+        case ':': tok.type = TKN_COLON; break;
+        case ';': tok.type = TKN_SEMICOLON; break;
+        case '?': tok.type = TKN_QUESTION; break;
         case '.':
-            if (is_digit(scnr_peek(scnr))) {
-                return scan_number(scnr);
-            }
-            return mktoken(scnr, TKN_DOT);
-
-        case '+': return mktoken(scnr,
-            scnr_match(scnr, '=') ? TKN_PLUS_EQUAL : TKN_PLUS);
-        case '-': return mktoken(scnr,
-            scnr_match(scnr, '=') ? TKN_MINUS_EQUAL : TKN_MINUS);
-        case '*': return mktoken(scnr,
-            scnr_match(scnr, '=') ? TKN_STAR_EQUAL : TKN_STAR);
-        case '/': return mktoken(scnr,
-            scnr_match(scnr, '=') ? TKN_SLASH_EQUAL : TKN_SLASH);
-        case '%': return mktoken(scnr,
-            scnr_match(scnr, '=') ? TKN_PERCENT_EQUAL : TKN_PERCENT);
-        case '~': return mktoken(scnr,
-            scnr_match(scnr, '=') ? TKN_TILDE_EQUAL : TKN_TILDE);
-        case '^': return mktoken(scnr,
-            scnr_match(scnr, '=') ? TKN_CARET_EQUAL : TKN_CARET);
-        case '!': return mktoken(scnr,
-            scnr_match(scnr, '=') ? TKN_BANG_EQUAL : TKN_BANG);
-        case '=': return mktoken(scnr,
-            scnr_match(scnr, '=') ? TKN_EQUAL_EQUAL : TKN_EQUAL);
-
-        case '<': return mktoken(scnr,
-            scnr_match(scnr, '=') ? TKN_LESS_EQUAL :
-                scnr_match(scnr, '<') ?
-                    scnr_match(scnr, '=') ? TKN_LESS_LESS_EQUAL
-                        : TKN_LESS_LESS
-                    : TKN_LESS);
-        case '>': return mktoken(scnr,
-            scnr_match(scnr, '=') ? TKN_GREATER_EQUAL :
-                scnr_match(scnr, '>') ?
-                    scnr_match(scnr, '=') ? TKN_GREATER_GREATER_EQUAL
-                        : TKN_GREATER_GREATER
-                    : TKN_GREATER);
-
-        case '&': return mktoken(scnr,
-            scnr_match(scnr, '=') ? TKN_AMP_EQUAL :
-                scnr_match(scnr, '&') ? TKN_AMP_AMP : TKN_AMP);
-        case '|': return mktoken(scnr,
-            scnr_match(scnr, '=') ? TKN_PIPE_EQUAL :
-                scnr_match(scnr, '|') ? TKN_PIPE_PIPE : TKN_PIPE);
-
-        case '\'': return scan_char(scnr);
-        case '"': return scan_string(scnr);
-
+            tok.type = TKN_DOT;
+            if (is_digit(peek(scnr))) {
+                tok.type = TKN_NUMBER;
+                scnr->cur_index++;
+                while (is_numeric_char(peek(scnr))) {
+                    scnr->cur_index++;
+                }
+            } break;
+        case '+':
+            tok.type = match(scnr, '=') ? TKN_PLUS_EQUAL : TKN_PLUS;
+            break;
+        case '-':
+            tok.type = match(scnr, '=') ? TKN_MINUS_EQUAL : TKN_MINUS;
+            break;
+        case '*':
+            tok.type = match(scnr, '=') ? TKN_STAR_EQUAL : TKN_STAR;
+            break;
+        case '/':
+            if (match(scnr, '=')) {
+                tok.type = TKN_SLASH_EQUAL;
+            } else if (match(scnr, '/')) {
+                tok.type = TKN_COMMENT_INLINE;
+                while (peek(scnr) != '\n' && peek(scnr) != '\0') {
+                    scnr->cur_index++;
+                }
+            } else if (match(scnr, '*')) {
+                tok.type = TKN_COMMENT_BLOCK;
+                size_t depth = 1;
+                while (depth > 0) {
+                    const char cur = advance(scnr);
+                    if (cur == '\0') {
+                        scnr->cur_index--; // avoid OOB access src
+                        return (TokenResult) { .error = (TokenErr){
+                            ._null = TKN__NULL,
+                            .err_type = TKNERR_OPEN_COMMENT,
+                            .start = tok.start,
+                        }};
+                    }
+                    if (cur == '/' && match(scnr, '*')) {
+                        depth++;
+                    } else if (cur == '*' && match(scnr, '/')) {
+                        depth--;
+                    }
+                }
+            } else {
+                tok.type = TKN_SLASH;
+            } break;
+        case '%':
+            tok.type = match(scnr, '=') ? TKN_PERCENT_EQUAL : TKN_PERCENT;
+            break;
+        case '~':
+            tok.type = match(scnr, '=') ? TKN_TILDE_EQUAL : TKN_TILDE;
+            break;
+        case '^':
+            tok.type = match(scnr, '=') ? TKN_CARET_EQUAL : TKN_CARET;
+            break;
+        case '!':
+            tok.type = match(scnr, '=') ? TKN_BANG_EQUAL : TKN_BANG;
+            break;
+        case '=':
+            tok.type = match(scnr, '=') ? TKN_EQUAL_EQUAL : TKN_EQUAL;
+            break;
+        case '<':
+            if (match(scnr, '=')) {
+                tok.type = TKN_LESS_EQUAL;
+            } else if (match(scnr, '<')) {
+                if (match(scnr, '=')) {
+                    tok.type = TKN_LESS_LESS_EQUAL;
+                } else {
+                    tok.type = TKN_LESS_LESS;
+                }
+            } else {
+                tok.type = TKN_LESS;
+            } break;
+        case '>':
+            if (match(scnr, '=')) {
+                tok.type = TKN_GREATER_EQUAL;
+            } else if (match(scnr, '>')) {
+                if (match(scnr, '=')) {
+                    tok.type = TKN_GREATER_GREATER_EQUAL;
+                } else {
+                    tok.type = TKN_GREATER_GREATER;
+                }
+            } else {
+                tok.type = TKN_GREATER;
+            } break;
+        case '&':
+            if (match(scnr, '=')) {
+                tok.type = TKN_AMP_EQUAL;
+            } else if (match(scnr, '&')) {
+                tok.type = TKN_AMP_AMP;
+            } else {
+                tok.type = TKN_AMP;
+            } break;
+        case '|':
+            if (match(scnr, '=')) {
+                tok.type = TKN_PIPE_EQUAL;
+            } else if (match(scnr, '|')) {
+                tok.type = TKN_PIPE_PIPE;
+            } else {
+                tok.type = TKN_PIPE;
+            } break;
+        case '\'':
+            tok.type = TKN_CHAR;
+            if (!advance_enclosed(scnr, '\'')) {
+                return (TokenResult) { .error = (TokenErr){
+                    ._null = TKN__NULL,
+                    .err_type = TKNERR_OPEN_CHAR,
+                    .start = tok.start,
+                }};
+            } break;
+        case '"':
+            tok.type = TKN_STRING;
+            if (!advance_enclosed(scnr, '"')) {
+                return (TokenResult) { .error = (TokenErr){
+                    ._null = TKN__NULL,
+                    .err_type = TKNERR_OPEN_STRING,
+                    .start = tok.start,
+                }};
+            } break;
+        case '`':
+            tok.type = TKN_IDENTIFIER;
+            if (!advance_enclosed(scnr, '`')) {
+                return (TokenResult) { .error = (TokenErr){
+                    ._null = TKN__NULL,
+                    .err_type = TKNERR_OPEN_IDENTIFIER,
+                    .start = tok.start,
+                }};
+            } break;
         default:
             if (is_digit(c)) {
-                return scan_number(scnr);
+                tok.type = TKN_NUMBER;
+                while (is_numeric_char(peek(scnr))) {
+                    scnr->cur_index++;
+                }
             } else if (is_identifier_char(c)) {
-                return scan_identifier(scnr);
+                tok.type = TKN_IDENTIFIER;
+                while (is_identifier_char(peek(scnr))) {
+                    scnr->cur_index++;
+                }
+                tok.len = scnr->cur_index - tok.start;
+                tok = ident_to_keyword(scnr->src, tok);
             } else {
-                return mktoken(scnr, TKN__NULL);
-            }
+                return (TokenResult){ .error = (TokenErr){
+                    ._null = TKN__NULL,
+                    .err_type = TKNERR_UNEXPECTED,
+                    .start = tok.start,
+                }};
+            } break;
     }
+    tok.len = scnr->cur_index - tok.start;
+    return (TokenResult){ .token = tok };
 }
