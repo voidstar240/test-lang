@@ -35,18 +35,18 @@ void print_err(ParseError err) {
     switch (err.type) {
         case ERR_UNEXPECTED:
             printf("Got \"%s\" @ %zu. Expected one of",
-                    token_type_str(err.tok.tag),
+                    tkn_tag_name(err.tok.tag),
                     err.tok.start);
             for (int i = 0; i < 8; i++) {
                 TokenTag tok = err.data.unexpected.expected[i];
                 if (tok == 0) { break; }
-                printf(" \"%s\"", token_type_str(tok));
+                printf(" \"%s\"", tkn_tag_name(tok));
             }
             printf(".\n");
             break;
         case ERR_BAD_OP:
             printf("Bad Operator \"%s\" @ %zu.\n",
-                    token_type_str(err.tok.tag),
+                    tkn_tag_name(err.tok.tag),
                     err.tok.start);
             break;
         case ERR_GENERIC:

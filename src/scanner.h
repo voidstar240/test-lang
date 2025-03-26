@@ -79,7 +79,7 @@ static inline Scanner scnr_init(const char* src) {
 
 Token scnr_next(Scanner* scnr);
 
-static inline const char* token_type_str(TokenTag tag) {
+static inline const char* tkn_tag_name(TokenTag tag) {
     switch (tag) {
         case TKN_EOF: return "EOF";
         case TKN_L_PAREN: return "l_paren";
