@@ -130,7 +130,7 @@ typedef struct {
             const char* msg;
         } generic;
         struct {
-            TokenType expected[8];
+            TokenTag expected[8];
         } unexpected;
     } data;
 } ParseError;
@@ -157,7 +157,7 @@ typedef struct {
 static inline Parser parser_init(Scanner* scnr, Alloc* str_alloc, Alloc* node_alloc) {
     return (Parser){
         .scnr = scnr,
-        .token = scnr_next(scnr).token,
+        .token = scnr_next(scnr),
         .errs = arrlist_init(ParseError),
         .str_alloc = str_alloc,
         .node_alloc = node_alloc,

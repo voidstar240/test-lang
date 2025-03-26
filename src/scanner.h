@@ -6,8 +6,7 @@
 #include <stdint.h>
 
 typedef enum {
-    TKN__NULL = 0,
-    TKN_EOF = 1,
+    TKN_EOF = 0x00,
 
     TKN_L_PAREN,   TKN_R_PAREN,
     TKN_L_BRACE,   TKN_R_BRACE,
@@ -40,38 +39,30 @@ typedef enum {
     TKN_ONES,  TKN_OR,   TKN_RETURN, TKN_TRUE, TKN_UNDEF, TKN_VAR, TKN_WHILE,
     TKN_ZEROS,
 
-    TKN_COMMENT_INLINE,
+    // NON-PARSED
+    TKN_COMMENT_INLINE = 0x80,
     TKN_COMMENT_BLOCK,
-} TokenType;
 
-typedef struct {
-    uint8_t type;
-    uint8_t _pad;
-    size_t start;
-    size_t len;
-} Token;
-
-typedef enum {
-    TKNERR_UNEXPECTED,
+    // ERRORS
+    TKNERR_UNEXPECTED = 0xC0,
     TKNERR_OPEN_COMMENT,
     TKNERR_OPEN_CHAR,
     TKNERR_OPEN_STRING,
     TKNERR_OPEN_IDENTIFIER,
-} TokenErrType;
+} TokenTag;
 
 typedef struct {
-    uint8_t _null;
-    uint8_t err_type;
+    uint8_t tag;
     size_t start;
-} TokenErr;
+    size_t len;
+} Token;
 
-typedef union {
-    Token token;
-    TokenErr error;
-} TokenResult;
+static inline bool tkn_is_err(Token tkn) {
+    return tkn.tag >= 0xC0;
+}
 
-static inline bool valid_tkn_res(TokenResult tkn_res) {
-    return tkn_res.token.type != TKN__NULL;
+static inline bool tkn_is_parsed(Token tkn) {
+    return tkn.tag < 0x80;
 }
 
 typedef struct {
@@ -86,11 +77,10 @@ static inline Scanner scnr_init(const char* src) {
     };
 }
 
-TokenResult scnr_next(Scanner* scnr);
+Token scnr_next(Scanner* scnr);
 
-static inline const char* token_type_str(TokenType type) {
-    switch (type) {
-        case TKN__NULL: return "NULL";
+static inline const char* token_type_str(TokenTag tag) {
+    switch (tag) {
         case TKN_EOF: return "EOF";
         case TKN_L_PAREN: return "l_paren";
         case TKN_R_PAREN: return "r_paren";
@@ -156,6 +146,11 @@ static inline const char* token_type_str(TokenType type) {
         case TKN_ZEROS: return "zeros";
         case TKN_COMMENT_INLINE: return "comment_inline";
         case TKN_COMMENT_BLOCK: return "comment_block";
+        case TKNERR_UNEXPECTED: return "ERROR_UNEXPECTED";
+        case TKNERR_OPEN_COMMENT: return "ERROR_OPEN_COMMENT";
+        case TKNERR_OPEN_CHAR: return "ERROR_OPEN_CHAR";
+        case TKNERR_OPEN_STRING: return "ERROR_OPEN_STRING";
+        case TKNERR_OPEN_IDENTIFIER: return "ERROR_OPEN_IDENTIFIER";
     }
 }
 

@@ -14,7 +14,7 @@ static inline ParseError err_str(const char* msg) {
     };
 }
 
-static inline ParseError err_unexp(Token current, TokenType expected) {
+static inline ParseError err_unexp(Token current, TokenTag expected) {
     ParseError err = {0};
     err.type = ERR_UNEXPECTED;
     err.tok = current;
@@ -35,18 +35,18 @@ void print_err(ParseError err) {
     switch (err.type) {
         case ERR_UNEXPECTED:
             printf("Got \"%s\" @ %zu. Expected one of",
-                    token_type_str(err.tok.type),
+                    token_type_str(err.tok.tag),
                     err.tok.start);
             for (int i = 0; i < 8; i++) {
-                TokenType tok = err.data.unexpected.expected[i];
-                if (tok == TKN__NULL) { break; }
+                TokenTag tok = err.data.unexpected.expected[i];
+                if (tok == 0) { break; }
                 printf(" \"%s\"", token_type_str(tok));
             }
             printf(".\n");
             break;
         case ERR_BAD_OP:
             printf("Bad Operator \"%s\" @ %zu.\n",
-                    token_type_str(err.tok.type),
+                    token_type_str(err.tok.tag),
                     err.tok.start);
             break;
         case ERR_GENERIC:
@@ -58,12 +58,15 @@ void print_err(ParseError err) {
 
 static inline Token pop_token(Parser* par) {
     const Token out = par->token;
-    par->token = scnr_next(par->scnr).token; // TODO handle error
+    do {
+        par->token = scnr_next(par->scnr);
+        // Don't care about comments, but errors need to be stored
+    } while (!tkn_is_parsed(par->token) && !tkn_is_err(par->token));
     return out;
 }
 
-static inline bool expect_token(Parser* par, TokenType type) {
-    if (par->token.type != type) {
+static inline bool expect_token(Parser* par, TokenTag type) {
+    if (par->token.tag != type) {
         ParseError err = {0};
         err.type = ERR_UNEXPECTED;
         err.tok = par->token;
@@ -179,7 +182,7 @@ typedef enum {
     INOP__MAX          = 0xff,
 } InfixOp;
 
-static PrefixOp prefix_op_of(TokenType tok) {
+static PrefixOp prefix_op_of(TokenTag tok) {
     switch (tok) {
         case TKN_BANG:  return PREOP_BOOL_NOT;
         case TKN_TILDE: return PREOP_BIT_NOT;
@@ -188,7 +191,7 @@ static PrefixOp prefix_op_of(TokenType tok) {
     }
 }
 
-static InfixOp infix_op_of(TokenType tok) {
+static InfixOp infix_op_of(TokenTag tok) {
     switch (tok) {
         case TKN_EQUAL:         return INOP_ASSIGN;
         case TKN_EQUAL_EQUAL:   return INOP_EQUAL;
@@ -284,7 +287,7 @@ static ASTType type_of_prefix(PrefixOp op) {
 }
 
 static ASTRef parse_nud(Parser* par) {
-    PrefixOp op = prefix_op_of(par->token.type);
+    PrefixOp op = prefix_op_of(par->token.tag);
     if (op) {
         pop_token(par);
         ASTRef expr = parse_expression(par, bind_pow_of(op));
@@ -298,7 +301,7 @@ static ASTRef parse_nud(Parser* par) {
             .node = unary,
         };
     }
-    switch (par->token.type) {
+    switch (par->token.tag) {
         case TKN_NUMBER:
             return (ASTRef) {
                 .type = AST_LITERAL,
@@ -348,7 +351,7 @@ static ASTType type_of_infix(InfixOp op) {
 static ASTRef parse_call(Parser* par, ASTRef callee) {
     ArrayList args = arrlist_init(ASTRef);
     while (true) {
-        if (par->token.type == TKN_R_PAREN) {
+        if (par->token.tag == TKN_R_PAREN) {
             pop_token(par);
             break;
         }
@@ -361,7 +364,7 @@ static ASTRef parse_call(Parser* par, ASTRef callee) {
         }
         arrlist_push(&args, ASTRef, arg_expr);
 
-        if (par->token.type == TKN_COMMA) {
+        if (par->token.tag == TKN_COMMA) {
             pop_token(par);
         }
     }
@@ -389,7 +392,7 @@ static ASTRef parse_index(Parser* par, ASTRef item) {
 }
 
 static ASTRef parse_access(Parser* par, ASTRef parent) {
-    if (par->token.type != TKN_IDENTIFIER) {
+    if (par->token.tag != TKN_IDENTIFIER) {
         ParseError err = {0};
         err.type = ERR_UNEXPECTED;
         err.tok = par->token;
@@ -406,7 +409,7 @@ static ASTRef parse_access(Parser* par, ASTRef parent) {
 }
 
 static ASTRef parse_led(Parser* par, ASTRef left, int8_t lbp) {
-    InfixOp op = infix_op_of(par->token.type);
+    InfixOp op = infix_op_of(par->token.tag);
     pop_token(par);
     switch (op) {
         case INOP_CALL:   return parse_call(par, left);
@@ -437,7 +440,7 @@ ASTRef parse_expression(Parser* par, int8_t rbp) {
     }
     
     while (true) {
-        InfixOp op = infix_op_of(par->token.type);
+        InfixOp op = infix_op_of(par->token.tag);
         if (op == INOP__NULL) return left;
 
         uint8_t lbp = bind_pow_of(op);
@@ -467,7 +470,7 @@ static ASTRef parse_var_decl(Parser* par) {
     }
 
     Token type = {0};
-    if (par->token.type == TKN_COLON) {
+    if (par->token.tag == TKN_COLON) {
         pop_token(par);
         type = par->token;
         if (!expect_token(par, TKN_IDENTIFIER)) {
@@ -515,9 +518,9 @@ static ASTRef parse_return(Parser* par) {
 
 ASTRef parse_statement(Parser* par) {
     ASTRef inner;
-    if (par->token.type == TKN_VAR) {
+    if (par->token.tag == TKN_VAR) {
         inner = parse_var_decl(par);
-    } else if (par->token.type == TKN_RETURN) {
+    } else if (par->token.tag == TKN_RETURN) {
         inner = parse_return(par);
     } else {
         inner = parse_expression(par, 0);
@@ -546,7 +549,7 @@ ASTRef parse_function_decl(Parser* par) {
 
     ArrayList params = arrlist_init(Param);
     while (true) {
-        if (par->token.type != TKN_IDENTIFIER) {
+        if (par->token.tag != TKN_IDENTIFIER) {
             break;
         }
         Param param = {0};
@@ -561,7 +564,7 @@ ASTRef parse_function_decl(Parser* par) {
             return ast_error(par, err_str("Failed to parse fn param"));
         }
 
-        if (par->token.type != TKN_IDENTIFIER) {
+        if (par->token.tag != TKN_IDENTIFIER) {
             arrlist_deinit(&params);
             return ast_error(par, err_str("Failed to parse fn param type"));
         }
@@ -573,7 +576,7 @@ ASTRef parse_function_decl(Parser* par) {
 
         arrlist_push(&params, Param, param);
 
-        if (par->token.type == TKN_COMMA) {
+        if (par->token.tag == TKN_COMMA) {
             pop_token(par);
         }
     }
@@ -584,7 +587,7 @@ ASTRef parse_function_decl(Parser* par) {
     }
 
     Str ret_type = str_lit("");
-    if (par->token.type == TKN_IDENTIFIER) {
+    if (par->token.tag == TKN_IDENTIFIER) {
         ret_type = str_alloc(
             par->str_alloc,
             &par->scnr->src[par->token.start],
@@ -599,7 +602,7 @@ ASTRef parse_function_decl(Parser* par) {
 
     ArrayList statements = arrlist_init(ASTRef);
     while (true) {
-        if (par->token.type == TKN_R_BRACE) {
+        if (par->token.tag == TKN_R_BRACE) {
             break;
         }
         
