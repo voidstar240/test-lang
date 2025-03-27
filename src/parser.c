@@ -6,6 +6,49 @@
 #include "parser.h"
 #include "scanner.h"
 
+
+// TODO return error instead of printf/exit
+static uint32_t insert_node_ast(AST* ast, ASTType tag, NodeData data) {
+    if (ast->nodes_len == ast->nodes_cap) { // grow
+        size_t new_cap = 2UL * (size_t)ast->nodes_cap;
+        if (new_cap > 0xFFFFFFFFUL) { // overflow ast->nodes_cap
+            fprintf(stderr, "Too many AST nodes!");
+            exit(1);
+        }
+        ast->node_tags = realloc(ast->node_tags, new_cap);
+        ast->node_datas = realloc(ast->node_datas, new_cap * sizeof(NodeData));
+        ast->nodes_cap = new_cap;
+    }
+    ast->node_tags[ast->nodes_len] = tag;
+    ast->node_datas[ast->nodes_len] = data;
+    return ast->nodes_len++;
+}
+
+// TODO return error instead of printf/exit
+static uint32_t insert_extra_ast(AST* ast, uint8_t (*extra)[8], uint32_t len) {
+    if ((ast->extra_len & len) >> 31) { // overflow ast->extra_len
+            fprintf(stderr, "Too much AST extra data!");
+            exit(1);
+    }
+    uint32_t new_len = ast->extra_len + len;
+    if (new_len >= ast->extra_cap) { // grow
+        size_t new_cap = 2UL * (size_t)ast->extra_cap;
+        while ((size_t)new_len >= new_cap) { new_cap *= 2; }
+        if (new_cap > 0xFFFFFFFFUL) { // overflow ast->nodes_cap
+            fprintf(stderr, "Too much AST extra data!");
+            exit(1);
+        }
+        ast->extra_data = realloc(ast->node_datas, new_cap * 8);
+        ast->extra_cap = new_cap;
+    }
+    memcpy(&ast->extra_data[ast->extra_len], extra, len * 8);
+    uint32_t pos = ast->extra_len;
+    ast->extra_len = new_len;
+    return pos;
+}
+
+
+
 static inline ParseError err_str(const char* msg) {
     return (ParseError){
         .type = ERR_GENERIC,
