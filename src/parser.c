@@ -8,7 +8,7 @@
 
 
 // TODO return error instead of printf/exit
-static uint32_t insert_node_ast(AST* ast, ASTType tag, NodeData data) {
+static uint32_t insert_node_ast(AST* ast, ASTTag tag, NodeData data) {
     if (ast->nodes_len == ast->nodes_cap) { // grow
         size_t new_cap = 2UL * (size_t)ast->nodes_cap;
         if (new_cap > 0xFFFFFFFFUL) { // overflow ast->nodes_cap
@@ -318,7 +318,7 @@ static Assoc assoc_of(InfixOp op) {
     }
 }
 
-static ASTType type_of_prefix(PrefixOp op) {
+static ASTTag type_of_prefix(PrefixOp op) {
     switch (op) {
         case PREOP_BOOL_NOT: return AST_UNARY_BOOL_NOT;
         case PREOP_BIT_NOT:  return AST_UNARY_BIT_NOT;
@@ -367,7 +367,7 @@ static ASTRef parse_nud(Parser* par) {
     }
 }
 
-static ASTType type_of_infix(InfixOp op) {
+static ASTTag type_of_infix(InfixOp op) {
     switch (op) {
         case INOP_ASSIGN:        return AST_BINARY_ASSIGN;
         case INOP_EQUAL:         return AST_BINARY_EQUAL;
