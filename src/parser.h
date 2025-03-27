@@ -81,10 +81,10 @@ typedef enum {
 
     AST__COUNT,
     AST__MAX = 0xff,
-} ASTType;
+} ASTTag;
 
 typedef struct {
-    ASTType type;
+    ASTTag type;
     void* node;
 } ASTRef;
 
