@@ -9,6 +9,45 @@
 #include "alloc.h"
 #include "str.h"
 
+typedef struct {
+    size_t start;
+    uint8_t data[8];
+} NodeData;
+
+typedef struct {
+    uint8_t* node_tags;
+    NodeData* node_datas;
+    uint32_t nodes_cap;
+    uint32_t nodes_len;
+    uint8_t (*extra_data)[8];
+    uint32_t extra_cap;
+    uint32_t extra_len;
+} AST;
+
+typedef struct {
+    size_t start;
+    uint32_t num_id;
+    uint8_t _pad[4];
+} NodeDataNumber;
+
+typedef struct {
+    size_t start;
+    uint32_t str_id;
+    uint8_t _pad[4];
+} NodeDataString;
+
+typedef struct {
+    size_t start;
+    uint32_t inner;
+    uint8_t _pad[4];
+} NodeDataUnary;
+
+typedef struct {
+    size_t start;
+    uint32_t lhs;
+    uint32_t rhs;
+} NodeDataBinary;
+
 typedef enum {
     AST__NULL,
 
@@ -149,6 +188,8 @@ void print_err(ParseError err);
 typedef struct {
     Scanner* scnr;
     Token token;
+    AST ast;
+    // TODO add string and number table
     ArrayList errs;
     Alloc* str_alloc;
     Alloc* node_alloc;
@@ -158,6 +199,15 @@ static inline Parser parser_init(Scanner* scnr, Alloc* str_alloc, Alloc* node_al
     return (Parser){
         .scnr = scnr,
         .token = scnr_next(scnr),
+        .ast = (AST) {
+            .node_tags = malloc(64),
+            .node_datas = malloc(64 * sizeof(NodeData)),
+            .nodes_cap = 64,
+            .nodes_len = 1,
+            .extra_data = malloc(64 * 8),
+            .extra_cap = 64,
+            .extra_len = 1,
+        },
         .errs = arrlist_init(ParseError),
         .str_alloc = str_alloc,
         .node_alloc = node_alloc,
