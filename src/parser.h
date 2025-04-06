@@ -10,6 +10,17 @@
 #include "str.h"
 
 typedef struct {
+    const char* bytes;
+    size_t len;
+} StringData;
+
+typedef struct { // TODO use some form of map for better perf
+    StringData* strings;
+    uint32_t cap;
+    uint32_t len;
+} StringTable;
+
+typedef struct {
     size_t start;
     uint8_t data[8];
 } NodeData;
@@ -189,7 +200,8 @@ typedef struct {
     Scanner* scnr;
     Token token;
     AST ast;
-    // TODO add string and number table
+    StringTable strings;
+    // TODO add number table
     ArrayList errs;
     Alloc* str_alloc;
     Alloc* node_alloc;
@@ -199,6 +211,11 @@ static inline Parser parser_init(Scanner* scnr, Alloc* str_alloc, Alloc* node_al
     return (Parser){
         .scnr = scnr,
         .token = scnr_next(scnr),
+        .strings = (StringTable) {
+            .strings = malloc(64),
+            .cap = 64,
+            .len = 0,
+        },
         .ast = (AST) {
             .node_tags = malloc(64),
             .node_datas = malloc(64 * sizeof(NodeData)),
@@ -213,6 +230,8 @@ static inline Parser parser_init(Scanner* scnr, Alloc* str_alloc, Alloc* node_al
         .node_alloc = node_alloc,
     };
 }
+
+uint32_t parse_function_decl2(Parser* par);
 
 LiteralAST* parse_literal(Parser* par);
 ASTRef parse_expression(Parser* par, int8_t rbp);
