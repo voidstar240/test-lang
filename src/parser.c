@@ -6,6 +6,39 @@
 #include "parser.h"
 #include "scanner.h"
 
+// TODO return error instead of printf/exit
+static uint32_t insert_new_string(
+    StringTable* table,
+    const char* bytes,
+    size_t len
+) {
+    if (table->len >= table->cap) { // grow
+        size_t new_cap = 2UL * (size_t)table->cap;
+        if (new_cap > 0xFFFFFFFFUL) { // overflow table->cap
+            fprintf(stderr, "Too many strings!");
+            exit(1);
+        }
+        table->strings = realloc(table->strings, new_cap);
+        table->cap = new_cap;
+    }
+    table->strings[table->len] = (StringData) { .bytes = bytes, .len = len };
+    return table->len++;
+}
+
+static uint32_t insert_string(
+    StringTable* table,
+    const char* bytes,
+    size_t len
+) {
+    for (uint32_t i = 0; i < table->len; i++) { // check for existing string
+        if (table->strings[i].len != len) { continue; }
+        if (strncmp(table->strings[i].bytes, bytes, len) == 0) {
+            return i;
+        }
+    }
+    return insert_new_string(table, bytes, len);
+}
+
 
 // TODO return error instead of printf/exit
 static uint32_t insert_node_ast(AST* ast, ASTTag tag, NodeData data) {
@@ -46,8 +79,6 @@ static uint32_t insert_extra_ast(AST* ast, uint8_t (*extra)[8], uint32_t len) {
     ast->extra_len = new_len;
     return pos;
 }
-
-
 
 static inline ParseError err_str(const char* msg) {
     return (ParseError){
