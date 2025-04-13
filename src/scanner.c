@@ -94,11 +94,12 @@ static inline bool advance_enclosed(Scanner* scnr, char encloser) {
                 break;
             } else if (match(scnr, '\\')) {
                 esc = true;
+                continue;
             }
         } else {
             esc = false;
-            scnr->cur_index++;
         }
+        scnr->cur_index++;
     }
     return true;
 }
@@ -120,7 +121,7 @@ Token* scan_src(const char* src, uint32_t* out_len) {
                 exit(1);
             }
             cap *= 2;
-            tkns = realloc(tkns, cap);
+            tkns = realloc(tkns, (size_t)cap * sizeof(Token));
             if (tkns == NULL) {
                 fprintf(stderr, "ERROR: Token array out of memory\n");
                 exit(1);
@@ -129,7 +130,7 @@ Token* scan_src(const char* src, uint32_t* out_len) {
         tkn = scnr_next(&scnr);
         tkns[len++] = tkn;
     } while (tkn.tag != TKN_EOF);
-    tkns = realloc(tkns, len);
+    tkns = realloc(tkns, (size_t)len * sizeof(Token));
     if (tkns == NULL) {
         fprintf(stderr, "ERROR: Token array out of memory\n");
         exit(1);
@@ -338,4 +339,33 @@ Pos* tkn_pos_many(const char* src, Token* tkns, uint32_t tkns_len) {
         }
     }
     return out;
+}
+
+void debug_print_tokens(const char* src, Token* tkns, uint32_t tkns_len) {
+    if (tkns == NULL) { return; }
+    Pos* pos = tkn_pos_many(src, tkns, tkns_len);
+    if (pos == NULL) { return; }
+    uint32_t line = 1;
+    for (uint32_t i = 0; i < tkns_len; i++) {
+        const Token tkn = tkns[i];
+        while (line < pos[i].line) {
+            printf("\n");
+            line++;
+        }
+        switch (tkn.tag) {
+            case TKN_CHAR:
+            case TKN_STRING:
+            case TKN_NUMBER:
+            case TKN_IDENTIFIER:
+                printf("<%s, %.*s>",
+                    tkn_tag_name(tkn.tag),
+                    tkn.len,
+                    &src[tkn.start]);
+                break;
+            default:
+                printf("<%s>", tkn_tag_name(tkns[i].tag));
+                break;
+        }
+    }
+    printf("\n");
 }

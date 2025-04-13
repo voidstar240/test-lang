@@ -88,6 +88,8 @@ Token scnr_next(Scanner* scnr);
 Pos tkn_pos(const char* src, Token tkn);
 Pos* tkn_pos_many(const char* src, Token* tkns, uint32_t tkns_len);
 
+void debug_print_tokens(const char* src, Token* tkns, uint32_t tkns_len);
+
 static inline const char* tkn_tag_name(TokenTag tag) {
     switch (tag) {
         case TKN_EOF: return "EOF";
