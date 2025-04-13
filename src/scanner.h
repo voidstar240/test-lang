@@ -52,10 +52,15 @@ typedef enum {
 } TokenTag;
 
 typedef struct {
+    uint32_t start;
+    uint32_t len : 24;
     uint8_t tag;
-    size_t start;
-    size_t len;
 } Token;
+
+typedef struct {
+    uint32_t line;
+    uint32_t col;
+} Pos;
 
 static inline bool tkn_is_err(Token tkn) {
     return tkn.tag >= 0xC0;
@@ -67,7 +72,7 @@ static inline bool tkn_is_parsed(Token tkn) {
 
 typedef struct {
     const char* src;
-    size_t cur_index;
+    uint32_t cur_index;
 } Scanner;
 
 static inline Scanner scnr_init(const char* src) {
@@ -77,7 +82,11 @@ static inline Scanner scnr_init(const char* src) {
     };
 }
 
+Token* scan_src(const char* src, uint32_t* out_len);
 Token scnr_next(Scanner* scnr);
+
+Pos tkn_pos(const char* src, Token tkn);
+Pos* tkn_pos_many(const char* src, Token* tkns, uint32_t tkns_len);
 
 static inline const char* tkn_tag_name(TokenTag tag) {
     switch (tag) {
