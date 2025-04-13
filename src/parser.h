@@ -37,8 +37,7 @@ typedef struct {
 
 typedef struct {
     size_t start;
-    uint32_t num_id;
-    uint8_t _pad[4];
+    uint64_t value;
 } NodeDataNumber;
 
 typedef struct {
@@ -58,6 +57,22 @@ typedef struct {
     uint32_t lhs;
     uint32_t rhs;
 } NodeDataBinary;
+
+typedef struct {
+    size_t start;
+    uint32_t name_id;
+    uint32_t extra;
+} NodeDataFunctionPrototype;
+
+typedef struct {
+    uint32_t name_id;
+    uint32_t expr;
+} FunctionPrototypeParam;
+
+typedef struct {
+    uint8_t _pad[4];
+    uint32_t param_count;
+} NodeExtraFunctionPrototype;
 
 typedef enum {
     AST__NULL,
@@ -201,7 +216,6 @@ typedef struct {
     Token token;
     AST ast;
     StringTable strings;
-    // TODO add number table
     ArrayList errs;
     Alloc* str_alloc;
     Alloc* node_alloc;
