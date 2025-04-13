@@ -1,5 +1,7 @@
 #include "scanner.h"
+#include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 typedef struct {
     TokenTag tag;
@@ -101,12 +103,47 @@ static inline bool advance_enclosed(Scanner* scnr, char encloser) {
     return true;
 }
 
+Token* scan_src(const char* src, uint32_t* out_len) {
+    Token* tkns = malloc(64 * sizeof(Token));
+    if (tkns == NULL) {
+        fprintf(stderr, "ERROR: Token array out of memory\n");
+        exit(1);
+    }
+    uint32_t cap = 64;
+    uint32_t len = 0;
+    Scanner scnr = scnr_init(src);
+    Token tkn;
+    do {
+        if (len >= cap) { // grow
+            if (cap >> 31) { // overflow check
+                fprintf(stderr, "ERROR: Token array overflow\n");
+                exit(1);
+            }
+            cap *= 2;
+            tkns = realloc(tkns, cap);
+            if (tkns == NULL) {
+                fprintf(stderr, "ERROR: Token array out of memory\n");
+                exit(1);
+            }
+        }
+        tkn = scnr_next(&scnr);
+        tkns[len++] = tkn;
+    } while (tkn.tag != TKN_EOF);
+    tkns = realloc(tkns, len);
+    if (tkns == NULL) {
+        fprintf(stderr, "ERROR: Token array out of memory\n");
+        exit(1);
+    }
+    *out_len = len;
+    return tkns;
+}
+
 Token scnr_next(Scanner* scnr) {
     skip_whitespace(scnr);
     Token tok = {
-        .tag = 0,
         .start = scnr->cur_index,
         .len = 0,
+        .tag = 0,
     };
     const char c = advance(scnr);
     switch (c) {
@@ -258,4 +295,47 @@ Token scnr_next(Scanner* scnr) {
     }
     tok.len = scnr->cur_index - tok.start;
     return tok;
+}
+
+Pos tkn_pos(const char* src, Token tkn) {
+    Pos pos = { .line = 1, .col = 0 };
+    for (uint32_t i = 0; i < tkn.start; i++) {
+        pos.col++;
+        switch (src[i]) {
+            case '\0':
+                return pos;
+            case '\n':
+                pos.line++;
+                pos.col = 0;
+                break;
+        }
+    }
+    pos.col++;
+    return pos;
+}
+
+Pos* tkn_pos_many(const char* src, Token* tkns, uint32_t tkns_len) {
+    if (tkns_len == 0) { return NULL; }
+    Pos* out = malloc(sizeof(Pos) * tkns_len);
+    if (out == NULL) { return NULL; }
+    Pos pos = { .line = 1, .col = 0 };
+    uint32_t tkn_i = 0;
+    for (uint32_t i = 0; tkn_i < tkns_len; i++) {
+        pos.col++;
+        if (i == tkns[tkn_i].start) {
+            out[tkn_i++] = pos;
+        }
+        switch (src[i]) {
+            case '\0':
+                if (tkn_i != tkns_len) {
+                    free(out);
+                    return NULL;
+                }
+            case '\n':
+                pos.line++;
+                pos.col = 0;
+                break;
+        }
+    }
+    return out;
 }
