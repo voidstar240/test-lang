@@ -80,6 +80,83 @@ static uint32_t insert_extra_ast(AST* ast, uint8_t (*extra)[8], uint32_t len) {
     return pos;
 }
 
+static inline Token pop_token(Parser* par) {
+    const Token out = par->token;
+    do {
+        par->token = scnr_next(par->scnr);
+        // Don't care about comments, but errors need to be stored
+    } while (!tkn_is_parsed(par->token) && !tkn_is_err(par->token));
+    return out;
+}
+
+bool match_token(Parser* par, TokenTag tag) {
+    if (tkn_is_err(par->token)) {
+        // TODO report the error
+        return false;
+    }
+    if (par->token.tag != tag) {
+        // TODO report the error
+        return false;
+    }
+    pop_token(par);
+    return true;
+}
+
+uint32_t parse_function_decl2(Parser *par) {
+    const size_t start = par->token.start;
+    if (!match_token(par, TKN_FN)) {
+        return 0; // TODO communicate error and sync
+    }
+
+    const Token name = par->token;
+    if (!match_token(par, TKN_IDENTIFIER)) {
+        return 0;
+    }
+
+    if (!match_token(par, TKN_L_PAREN)) {
+        return 0;
+    }
+
+    // TODO parse parameter list
+
+    if (!match_token(par, TKN_R_PAREN)) {
+        return 0;
+    }
+    if (!match_token(par, TKN_L_BRACE)) {
+        return 0;
+    }
+
+    // TODO parse expressions
+
+    if (!match_token(par, TKN_R_BRACE)) {
+        return 0;
+    }
+
+    const uint32_t name_id = insert_string(
+        &par->strings,
+        &par->scnr->src[name.start],
+        name.len);
+
+    const NodeExtraFunctionPrototype extra = {
+        .param_count = 0,
+    };
+    uint32_t extra_id = insert_extra_ast(&par->ast, (uint8_t(*)[8])&extra, 1);
+
+    const NodeDataFunctionPrototype data =  {
+        .start = start,
+        .name_id = name_id,
+        .extra = extra_id,
+    };
+    // TODO CHANGE THE AST TAG TYPE
+    return insert_node_ast(&par->ast, AST_FUNCTION_DECL, *(NodeData*)&data);
+}
+
+
+
+
+
+
+
 static inline ParseError err_str(const char* msg) {
     return (ParseError){
         .type = ERR_GENERIC,
@@ -128,15 +205,6 @@ void print_err(ParseError err) {
             break;
         case ERR__NULL: printf("NULL ERROR\n"); break;
     }
-}
-
-static inline Token pop_token(Parser* par) {
-    const Token out = par->token;
-    do {
-        par->token = scnr_next(par->scnr);
-        // Don't care about comments, but errors need to be stored
-    } while (!tkn_is_parsed(par->token) && !tkn_is_err(par->token));
-    return out;
 }
 
 static inline bool expect_token(Parser* par, TokenTag type) {
