@@ -80,21 +80,25 @@ static uint32_t insert_extra_ast(AST* ast, uint8_t (*extra)[8], uint32_t len) {
     return pos;
 }
 
+static inline Token peek(Parser* par) {
+    return par->tkns[par->tkn_index];
+}
+
 static inline Token pop_token(Parser* par) {
-    const Token out = par->token;
+    Token out;
     do {
-        par->token = scnr_next(par->scnr);
-        // Don't care about comments, but errors need to be stored
-    } while (!tkn_is_parsed(par->token) && !tkn_is_err(par->token));
+        out = par->tkns[++par->tkn_index];
+        // ignore comments
+    } while (!tkn_is_parsed(out) && !tkn_is_err(out));
     return out;
 }
 
 bool match_token(Parser* par, TokenTag tag) {
-    if (tkn_is_err(par->token)) {
+    if (tkn_is_err(peek(par))) {
         // TODO report the error
         return false;
     }
-    if (par->token.tag != tag) {
+    if (peek(par).tag != tag) {
         // TODO report the error
         return false;
     }
@@ -103,12 +107,12 @@ bool match_token(Parser* par, TokenTag tag) {
 }
 
 uint32_t parse_function_decl2(Parser *par) {
-    const size_t start = par->token.start;
+    const size_t start = peek(par).start;
     if (!match_token(par, TKN_FN)) {
         return 0; // TODO communicate error and sync
     }
 
-    const Token name = par->token;
+    const Token name = peek(par);
     if (!match_token(par, TKN_IDENTIFIER)) {
         return 0;
     }
@@ -134,7 +138,7 @@ uint32_t parse_function_decl2(Parser *par) {
 
     const uint32_t name_id = insert_string(
         &par->strings,
-        &par->scnr->src[name.start],
+        &par->src[name.start],
         name.len);
 
     const NodeExtraFunctionPrototype extra = {
@@ -185,7 +189,7 @@ static ASTRef ast_error(Parser* par, ParseError err) {
 void print_err(ParseError err) {
     switch (err.type) {
         case ERR_UNEXPECTED:
-            printf("Got \"%s\" @ %zu. Expected one of",
+            printf("Got \"%s\" @ %d. Expected one of",
                     tkn_tag_name(err.tok.tag),
                     err.tok.start);
             for (int i = 0; i < 8; i++) {
@@ -196,7 +200,7 @@ void print_err(ParseError err) {
             printf(".\n");
             break;
         case ERR_BAD_OP:
-            printf("Bad Operator \"%s\" @ %zu.\n",
+            printf("Bad Operator \"%s\" @ %d.\n",
                     tkn_tag_name(err.tok.tag),
                     err.tok.start);
             break;
@@ -208,10 +212,10 @@ void print_err(ParseError err) {
 }
 
 static inline bool expect_token(Parser* par, TokenTag type) {
-    if (par->token.tag != type) {
+    if (peek(par).tag != type) {
         ParseError err = {0};
         err.type = ERR_UNEXPECTED;
-        err.tok = par->token;
+        err.tok = peek(par);
         err.data.unexpected.expected[0] = type;
         log_error(par, err);
         return false;
@@ -275,8 +279,8 @@ static int64_t int_from_str(const char* bytes, size_t len) {
 LiteralAST* parse_literal(Parser* par) {
     LiteralAST* lit = alloc_alloc(par->node_alloc, sizeof(LiteralAST));
     lit->number = int_from_str(
-        &par->scnr->src[par->token.start],
-        par->token.len);
+        &par->src[peek(par).start],
+        peek(par).len);
     pop_token(par);
     return lit;
 }
@@ -286,7 +290,7 @@ SymbolAST* parse_symbol(Parser* par) {
     Token ident = pop_token(par);
     sym->name = str_alloc(
         par->str_alloc,
-        &par->scnr->src[ident.start],
+        &par->src[ident.start],
         ident.len);
     return sym;
 }
@@ -429,7 +433,7 @@ static ASTTag type_of_prefix(PrefixOp op) {
 }
 
 static ASTRef parse_nud(Parser* par) {
-    PrefixOp op = prefix_op_of(par->token.tag);
+    PrefixOp op = prefix_op_of(peek(par).tag);
     if (op) {
         pop_token(par);
         ASTRef expr = parse_expression(par, bind_pow_of(op));
@@ -443,7 +447,7 @@ static ASTRef parse_nud(Parser* par) {
             .node = unary,
         };
     }
-    switch (par->token.tag) {
+    switch (peek(par).tag) {
         case TKN_NUMBER:
             return (ASTRef) {
                 .type = AST_LITERAL,
@@ -460,7 +464,7 @@ static ASTRef parse_nud(Parser* par) {
             expect_token(par, TKN_R_PAREN);
             return expr;
         default:;
-            ParseError err = err_unexp(par->token, TKN_NUMBER);
+            ParseError err = err_unexp(peek(par), TKN_NUMBER);
             err.data.unexpected.expected[1] = TKN_IDENTIFIER;
             return ast_error(par, err);
     }
@@ -493,7 +497,7 @@ static ASTTag type_of_infix(InfixOp op) {
 static ASTRef parse_call(Parser* par, ASTRef callee) {
     ArrayList args = arrlist_init(ASTRef);
     while (true) {
-        if (par->token.tag == TKN_R_PAREN) {
+        if (peek(par).tag == TKN_R_PAREN) {
             pop_token(par);
             break;
         }
@@ -506,7 +510,7 @@ static ASTRef parse_call(Parser* par, ASTRef callee) {
         }
         arrlist_push(&args, ASTRef, arg_expr);
 
-        if (par->token.tag == TKN_COMMA) {
+        if (peek(par).tag == TKN_COMMA) {
             pop_token(par);
         }
     }
@@ -534,10 +538,10 @@ static ASTRef parse_index(Parser* par, ASTRef item) {
 }
 
 static ASTRef parse_access(Parser* par, ASTRef parent) {
-    if (par->token.tag != TKN_IDENTIFIER) {
+    if (peek(par).tag != TKN_IDENTIFIER) {
         ParseError err = {0};
         err.type = ERR_UNEXPECTED;
-        err.tok = par->token;
+        err.tok = peek(par);
         err.data.unexpected.expected[0] = TKN_IDENTIFIER;
         return ast_error(par, err);
     }
@@ -551,7 +555,7 @@ static ASTRef parse_access(Parser* par, ASTRef parent) {
 }
 
 static ASTRef parse_led(Parser* par, ASTRef left, int8_t lbp) {
-    InfixOp op = infix_op_of(par->token.tag);
+    InfixOp op = infix_op_of(peek(par).tag);
     pop_token(par);
     switch (op) {
         case INOP_CALL:   return parse_call(par, left);
@@ -582,7 +586,7 @@ ASTRef parse_expression(Parser* par, int8_t rbp) {
     }
     
     while (true) {
-        InfixOp op = infix_op_of(par->token.tag);
+        InfixOp op = infix_op_of(peek(par).tag);
         if (op == INOP__NULL) return left;
 
         uint8_t lbp = bind_pow_of(op);
@@ -606,15 +610,15 @@ static ASTRef parse_var_decl(Parser* par) {
         return ast_error(par, err_str("Failed to parse var decl"));
     }
 
-    Token name = par->token;
+    Token name = peek(par);
     if (!expect_token(par, TKN_IDENTIFIER)) {
         return ast_error(par, err_str("Failed to parse var decl"));
     }
 
     Token type = {0};
-    if (par->token.tag == TKN_COLON) {
+    if (peek(par).tag == TKN_COLON) {
         pop_token(par);
-        type = par->token;
+        type = peek(par);
         if (!expect_token(par, TKN_IDENTIFIER)) {
             return ast_error(par, err_str("Failed to parse var decl"));
         }
@@ -631,11 +635,11 @@ static ASTRef parse_var_decl(Parser* par) {
     VarDeclAST* var_decl = alloc_alloc(par->node_alloc, sizeof(VarDeclAST));
     var_decl->name = str_alloc(
         par->str_alloc,
-        &par->scnr->src[name.start],
+        &par->src[name.start],
         name.len);
     var_decl->type = str_alloc(
         par->str_alloc,
-        &par->scnr->src[type.start],
+        &par->src[type.start],
         type.len);
     var_decl->expr = expr;
 
@@ -660,9 +664,9 @@ static ASTRef parse_return(Parser* par) {
 
 ASTRef parse_statement(Parser* par) {
     ASTRef inner;
-    if (par->token.tag == TKN_VAR) {
+    if (peek(par).tag == TKN_VAR) {
         inner = parse_var_decl(par);
-    } else if (par->token.tag == TKN_RETURN) {
+    } else if (peek(par).tag == TKN_RETURN) {
         inner = parse_return(par);
     } else {
         inner = parse_expression(par, 0);
@@ -680,7 +684,7 @@ ASTRef parse_function_decl(Parser* par) {
         return ast_error(par, err_str("Failed to parse fn decl"));
     }
 
-    Token name_token = par->token;
+    Token name_token = peek(par);
     if (!expect_token(par, TKN_IDENTIFIER)) {
         return ast_error(par, err_str("Failed to parse fn decl"));
     }
@@ -691,14 +695,14 @@ ASTRef parse_function_decl(Parser* par) {
 
     ArrayList params = arrlist_init(Param);
     while (true) {
-        if (par->token.tag != TKN_IDENTIFIER) {
+        if (peek(par).tag != TKN_IDENTIFIER) {
             break;
         }
         Param param = {0};
         param.name = str_alloc(
             par->str_alloc,
-            &par->scnr->src[par->token.start],
-            par->token.len);
+            &par->src[peek(par).start],
+            peek(par).len);
         pop_token(par);
 
         if (!expect_token(par, TKN_COLON)) {
@@ -706,19 +710,19 @@ ASTRef parse_function_decl(Parser* par) {
             return ast_error(par, err_str("Failed to parse fn param"));
         }
 
-        if (par->token.tag != TKN_IDENTIFIER) {
+        if (peek(par).tag != TKN_IDENTIFIER) {
             arrlist_deinit(&params);
             return ast_error(par, err_str("Failed to parse fn param type"));
         }
         param.type = str_alloc(
             par->str_alloc,
-            &par->scnr->src[par->token.start],
-            par->token.len);
+            &par->src[peek(par).start],
+            peek(par).len);
         pop_token(par);
 
         arrlist_push(&params, Param, param);
 
-        if (par->token.tag == TKN_COMMA) {
+        if (peek(par).tag == TKN_COMMA) {
             pop_token(par);
         }
     }
@@ -729,11 +733,11 @@ ASTRef parse_function_decl(Parser* par) {
     }
 
     Str ret_type = str_lit("");
-    if (par->token.tag == TKN_IDENTIFIER) {
+    if (peek(par).tag == TKN_IDENTIFIER) {
         ret_type = str_alloc(
             par->str_alloc,
-            &par->scnr->src[par->token.start],
-            par->token.len);
+            &par->src[peek(par).start],
+            peek(par).len);
         pop_token(par);
     }
 
@@ -744,7 +748,7 @@ ASTRef parse_function_decl(Parser* par) {
 
     ArrayList statements = arrlist_init(ASTRef);
     while (true) {
-        if (par->token.tag == TKN_R_BRACE) {
+        if (peek(par).tag == TKN_R_BRACE) {
             break;
         }
         
@@ -767,7 +771,7 @@ ASTRef parse_function_decl(Parser* par) {
     FunctionDeclAST* fn = alloc_alloc(par->node_alloc, sizeof(FunctionDeclAST));
     fn->name = str_alloc(
         par->str_alloc,
-        &par->scnr->src[name_token.start],
+        &par->src[name_token.start],
         name_token.len);
     fn->params = arrlist_to_array(&params);
     fn->params_len = params.len;

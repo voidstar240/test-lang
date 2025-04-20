@@ -212,19 +212,26 @@ void print_err(ParseError err);
 
 
 typedef struct {
-    Scanner* scnr;
-    Token token;
+    const char* src;
+    uint32_t src_len;
+    Token* tkns;
+    uint32_t tkns_len;
+    uint32_t tkn_index;
     AST ast;
     StringTable strings;
     ArrayList errs;
+
     Alloc* str_alloc;
     Alloc* node_alloc;
 } Parser;
 
-static inline Parser parser_init(Scanner* scnr, Alloc* str_alloc, Alloc* node_alloc) {
+static inline Parser parser_init(const char* src, uint32_t src_len, Token* tkns, uint32_t tkns_len, Alloc* str_alloc, Alloc* node_alloc) {
     return (Parser){
-        .scnr = scnr,
-        .token = scnr_next(scnr),
+        .src = src,
+        .src_len = src_len,
+        .tkns = tkns,
+        .tkns_len = tkns_len,
+        .tkn_index = 0,
         .strings = (StringTable) {
             .strings = malloc(64),
             .cap = 64,
@@ -240,6 +247,7 @@ static inline Parser parser_init(Scanner* scnr, Alloc* str_alloc, Alloc* node_al
             .extra_len = 1,
         },
         .errs = arrlist_init(ParseError),
+
         .str_alloc = str_alloc,
         .node_alloc = node_alloc,
     };
