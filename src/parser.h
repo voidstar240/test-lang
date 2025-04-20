@@ -21,7 +21,7 @@ typedef struct { // TODO use some form of map for better perf
 } StringTable;
 
 typedef struct {
-    size_t start;
+    size_t start; // TODO would token index be more useful?
     uint8_t data[8];
 } NodeData;
 
@@ -48,7 +48,7 @@ typedef struct {
 
 typedef struct {
     size_t start;
-    uint32_t inner;
+    uint32_t expr;
     uint8_t _pad[4];
 } NodeDataUnary;
 
@@ -104,9 +104,6 @@ typedef enum {
     AST_FUNCTION_DECL,
     AST_VAR_DECL,
     AST_RETURN,
-
-    AST__COUNT,
-    AST__MAX = 0xff,
 } ASTTag;
 
 typedef struct {
@@ -252,6 +249,8 @@ static inline Parser parser_init(const char* src, uint32_t src_len, Token* tkns,
         .node_alloc = node_alloc,
     };
 }
+
+uint32_t parse_expr(Parser* par, uint8_t r_bp);
 
 uint32_t parse_function_decl2(Parser* par);
 

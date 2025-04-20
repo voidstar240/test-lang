@@ -85,6 +85,7 @@ static inline Token peek(Parser* par) {
 }
 
 static inline Token pop_token(Parser* par) {
+    // TODO prevent overrunning tkns
     Token out;
     do {
         out = par->tkns[++par->tkn_index];
@@ -93,7 +94,7 @@ static inline Token pop_token(Parser* par) {
     return out;
 }
 
-bool match_token(Parser* par, TokenTag tag) {
+static bool match_token(Parser* par, TokenTag tag) {
     if (tkn_is_err(peek(par))) {
         // TODO report the error
         return false;
@@ -104,6 +105,251 @@ bool match_token(Parser* par, TokenTag tag) {
     }
     pop_token(par);
     return true;
+}
+
+typedef enum {
+    PREOP__NULL = 0x00,
+
+    PREOP_BOOL_NOT = 0x01, // Order must match ASTTag
+    PREOP_BIT_NOT,
+    PREOP_NEGATE,
+} PrefixOp;
+
+typedef enum {
+    INOP__NULL = 0x00,
+
+    INOP_ASSIGN = 0x40, // Order must match ASTTag
+    INOP_EQUAL,
+    INOP_NOT_EQUAL,
+    INOP_LESS,
+    INOP_LESS_EQUAL,
+    INOP_GREATER,
+    INOP_GREATER_EQUAL,
+    INOP_ADD,
+    INOP_SUB,
+    INOP_MUL,
+    INOP_DIV,
+    INOP_MOD,
+
+    INOP_CALL,
+    INOP_INDEX,
+    INOP_ACCESS,
+} InfixOp;
+
+static PrefixOp prefix_op(TokenTag tok) {
+    switch (tok) {
+        case TKN_BANG:  return PREOP_BOOL_NOT;
+        case TKN_TILDE: return PREOP_BIT_NOT;
+        case TKN_MINUS: return PREOP_NEGATE;
+        default:        return PREOP__NULL;
+    }
+}
+
+static InfixOp infix_op(TokenTag tok) {
+    switch (tok) {
+        case TKN_EQUAL:         return INOP_ASSIGN;
+        case TKN_EQUAL_EQUAL:   return INOP_EQUAL;
+        case TKN_BANG_EQUAL:    return INOP_NOT_EQUAL;
+        case TKN_LESS:          return INOP_LESS;
+        case TKN_LESS_EQUAL:    return INOP_LESS_EQUAL;
+        case TKN_GREATER:       return INOP_GREATER;
+        case TKN_GREATER_EQUAL: return INOP_GREATER_EQUAL;
+        case TKN_PLUS:          return INOP_ADD;
+        case TKN_MINUS:         return INOP_SUB;
+        case TKN_STAR:          return INOP_MUL;
+        case TKN_SLASH:         return INOP_DIV;
+        case TKN_PERCENT:       return INOP_MOD;
+        case TKN_L_PAREN:       return INOP_CALL;
+        case TKN_L_BRACKET:     return INOP_INDEX;
+        case TKN_DOT:           return INOP_ACCESS;
+        default:                return INOP__NULL;
+    }
+}
+
+static uint8_t bind_pow(uint8_t op) {
+    switch (op) {
+        case INOP_ASSIGN:
+            return 1;
+        case INOP_EQUAL:
+        case INOP_NOT_EQUAL:
+            return 2;
+        case INOP_LESS:
+        case INOP_LESS_EQUAL:
+        case INOP_GREATER:
+        case INOP_GREATER_EQUAL:
+            return 3;
+        case INOP_ADD:
+        case INOP_SUB:
+            return 4;
+        case INOP_MUL:
+        case INOP_DIV:
+        case INOP_MOD:
+            return 5;
+        case PREOP_BIT_NOT:
+        case PREOP_BOOL_NOT:
+        case PREOP_NEGATE:
+            return 6;
+        case INOP_CALL:
+        case INOP_INDEX:
+            return 7;
+        case INOP_ACCESS:
+            return 8;
+        default:
+            return 0;
+    }
+}
+
+static bool left_assoc(InfixOp op) {
+    switch (op) {
+        case INOP_ASSIGN:
+            return false;
+        case INOP_EQUAL:
+        case INOP_NOT_EQUAL:
+        case INOP_LESS:
+        case INOP_LESS_EQUAL:
+        case INOP_GREATER:
+        case INOP_GREATER_EQUAL:
+        case INOP_ADD:
+        case INOP_SUB:
+        case INOP_MUL:
+        case INOP_DIV:
+        case INOP_MOD:
+        case INOP_CALL:
+        case INOP_INDEX:
+        case INOP_ACCESS:
+            return true;
+        case INOP__NULL:
+            return false;
+    }
+}
+
+static uint64_t str_to_uint(const char* str, uint32_t len) {
+    uint64_t val = 0;
+    for (uint32_t i = 0; i < len; i++) {
+        const char c = str[i];
+        if (c < '0' || c > '9') {
+            return val;
+        }
+        val *= 10;
+        val += c - '0';
+    }
+    return val;
+}
+
+static uint32_t parse_number(Parser* par) {
+    const Token num = peek(par);
+    if (!match_token(par, TKN_NUMBER)) {
+        exit(1);
+        // TODO handle error
+        return 0;
+    }
+    const NodeDataNumber data = {
+        .start = num.start,
+        .value = str_to_uint(&par->src[num.start], num.len),
+    };
+    // TODO change AST_LITERAL to number
+    return insert_node_ast(&par->ast, AST_LITERAL, *(NodeData*)&data);
+}
+
+static uint32_t parse_symbol2(Parser* par) {
+    const Token sym = peek(par);
+    if (!match_token(par, TKN_IDENTIFIER)) {
+        // TODO handle error
+        exit(1);
+        return 0;
+    }
+    const NodeDataString data = {
+        .start = sym.start,
+        .str_id = insert_string(&par->strings, &par->src[sym.start], sym.len),
+    };
+    return insert_node_ast(&par->ast, AST_SYMBOL, *(NodeData*)&data);
+}
+
+static uint32_t parse_expr_lhs(Parser* par, uint8_t r_bp) {
+    Token l_tkn = peek(par);
+    if (tkn_is_err(l_tkn)) {
+        // TODO handle error
+        exit(1);
+    }
+    
+    const PrefixOp op = prefix_op(l_tkn.tag);
+    if (op) {
+        pop_token(par);
+        const uint32_t expr = parse_expr(par, bind_pow(op));
+        const NodeDataUnary data = {
+            .start = l_tkn.start,
+            .expr = expr,
+        };
+        const ASTTag tag = (op - PREOP_BOOL_NOT) + AST_UNARY_BOOL_NOT;
+        return insert_node_ast(&par->ast, tag, *(NodeData*)&data);
+    } else switch (l_tkn.tag) {
+        case TKN_NUMBER:
+            return parse_number(par);
+        case TKN_IDENTIFIER:
+            return parse_symbol2(par);
+        case TKN_L_PAREN:
+            pop_token(par);
+            const uint32_t lhs = parse_expr(par, 0);
+            if (!match_token(par, TKN_R_PAREN)) {
+                // TODO handle error
+                exit(1);
+            }
+            return lhs;
+        default:
+            // TODO handle error
+            exit(1);
+    }
+}
+
+uint32_t parse_expr(Parser* par, uint8_t r_bp) {
+    uint32_t lhs = parse_expr_lhs(par, r_bp);
+    if (lhs == 0) {
+        // TODO handle error
+        exit(1);
+    }
+    
+    while (true) {
+        const Token op_tkn = peek(par);
+        if (tkn_is_err(op_tkn)) {
+            // TODO handle error
+            exit(1);
+        }
+        const InfixOp op = infix_op(op_tkn.tag);
+        if (!op) { break; }
+        
+        const uint8_t l_bp = bind_pow(op);
+        const bool l_assoc = left_assoc(op);
+        if (l_assoc) {
+            if (l_bp <= r_bp) { break; }
+        } else {
+            if (l_bp < r_bp) { break; }
+        }
+        
+        pop_token(par);
+        // handle special inops
+        switch (op) {
+            case INOP_CALL:
+                // TODO parse call
+                break;
+            case INOP_INDEX:
+                // TODO parse index
+                break;
+            case INOP_ACCESS:
+                // TODO parse access
+                break;
+            default:;
+                const uint32_t rhs = parse_expr(par, bind_pow(op));
+                const NodeDataBinary data = {
+                    .start = op_tkn.start,
+                    .lhs = lhs,
+                    .rhs = rhs,
+                };
+                const ASTTag tag = (op - INOP_ASSIGN) + AST_BINARY_ASSIGN;
+                lhs = insert_node_ast(&par->ast, tag, *(NodeData*)&data);
+                break;
+        }
+    }
+    return lhs;
 }
 
 uint32_t parse_function_decl2(Parser *par) {
@@ -295,148 +541,21 @@ SymbolAST* parse_symbol(Parser* par) {
     return sym;
 }
 
-typedef enum {
-    PREOP__NULL    = 0x00,
-
-    PREOP_BOOL_NOT = 0x01,
-    PREOP_BIT_NOT  = 0x02,
-    PREOP_NEGATE   = 0x03,
-
-    PREOP__MAX     = 0xff,
-} PrefixOp;
-
-typedef enum {
-    INOP__NULL         = 0x00,
-
-    INOP_ASSIGN        = 0x11,
-    INOP_EQUAL         = 0x12,
-    INOP_NOT_EQUAL     = 0x13,
-    INOP_LESS          = 0x14,
-    INOP_LESS_EQUAL    = 0x15,
-    INOP_GREATER       = 0x16,
-    INOP_GREATER_EQUAL = 0x17,
-    INOP_ADD           = 0x18,
-    INOP_SUB           = 0x19,
-    INOP_MUL           = 0x1a,
-    INOP_DIV           = 0x1b,
-    INOP_MOD           = 0x1c,
-
-    INOP_CALL          = 0x1d,
-    INOP_INDEX         = 0x1e,
-    INOP_ACCESS           = 0x1f,
-
-    INOP__MAX          = 0xff,
-} InfixOp;
-
-static PrefixOp prefix_op_of(TokenTag tok) {
-    switch (tok) {
-        case TKN_BANG:  return PREOP_BOOL_NOT;
-        case TKN_TILDE: return PREOP_BIT_NOT;
-        case TKN_MINUS: return PREOP_NEGATE;
-        default:        return PREOP__NULL;
-    }
-}
-
-static InfixOp infix_op_of(TokenTag tok) {
-    switch (tok) {
-        case TKN_EQUAL:         return INOP_ASSIGN;
-        case TKN_EQUAL_EQUAL:   return INOP_EQUAL;
-        case TKN_BANG_EQUAL:    return INOP_NOT_EQUAL;
-        case TKN_LESS:          return INOP_LESS;
-        case TKN_LESS_EQUAL:    return INOP_LESS_EQUAL;
-        case TKN_GREATER:       return INOP_GREATER;
-        case TKN_GREATER_EQUAL: return INOP_GREATER_EQUAL;
-        case TKN_PLUS:          return INOP_ADD;
-        case TKN_MINUS:         return INOP_SUB;
-        case TKN_STAR:          return INOP_MUL;
-        case TKN_SLASH:         return INOP_DIV;
-        case TKN_PERCENT:       return INOP_MOD;
-        case TKN_L_PAREN:       return INOP_CALL;
-        case TKN_L_BRACKET:     return INOP_INDEX;
-        case TKN_DOT:           return INOP_ACCESS;
-        default:                return INOP__NULL;
-    }
-}
-
-static uint8_t bind_pow_of(uint8_t op) {
-    switch (op) {
-        case INOP_ASSIGN:
-            return 1;
-        case INOP_EQUAL:
-        case INOP_NOT_EQUAL:
-            return 2;
-        case INOP_LESS:
-        case INOP_LESS_EQUAL:
-        case INOP_GREATER:
-        case INOP_GREATER_EQUAL:
-            return 3;
-        case INOP_ADD:
-        case INOP_SUB:
-            return 4;
-        case INOP_MUL:
-        case INOP_DIV:
-        case INOP_MOD:
-            return 5;
-        case PREOP_BOOL_NOT:
-        case PREOP_BIT_NOT:
-        case PREOP_NEGATE:
-            return 6;
-        case INOP_CALL:
-        case INOP_INDEX:
-            return 7;
-        case INOP_ACCESS:
-            return 8;
-        default:
-            return 0;
-    }
-}
-
-typedef enum {
-    ASSOC_LEFT,
-    ASSOC_RIGHT,
-} Assoc;
-
-static Assoc assoc_of(InfixOp op) {
-    switch (op) {
-        case INOP_ASSIGN:
-            return ASSOC_RIGHT;
-        case INOP_EQUAL:
-        case INOP_NOT_EQUAL:
-        case INOP_LESS:
-        case INOP_LESS_EQUAL:
-        case INOP_GREATER:
-        case INOP_GREATER_EQUAL:
-        case INOP_ADD:
-        case INOP_SUB:
-        case INOP_MUL:
-        case INOP_DIV:
-        case INOP_MOD:
-        case INOP_CALL:
-        case INOP_INDEX:
-        case INOP_ACCESS:
-            return ASSOC_LEFT;
-        case INOP__MAX:
-        case INOP__NULL:
-            return ASSOC_LEFT;
-    }
-}
-
 static ASTTag type_of_prefix(PrefixOp op) {
     switch (op) {
         case PREOP_BOOL_NOT: return AST_UNARY_BOOL_NOT;
         case PREOP_BIT_NOT:  return AST_UNARY_BIT_NOT;
         case PREOP_NEGATE:   return AST_UNARY_NEGATE;
 
-        case PREOP__MAX:     return AST__NULL;
         case PREOP__NULL:    return AST__NULL;
     }
 }
 
 static ASTRef parse_nud(Parser* par) {
-    PrefixOp op = prefix_op_of(peek(par).tag);
+    PrefixOp op = prefix_op(peek(par).tag);
     if (op) {
         pop_token(par);
-        ASTRef expr = parse_expression(par, bind_pow_of(op));
+        ASTRef expr = parse_expression(par, bind_pow(op));
         if (!valid_ast(expr)) {
             return ast_error(par, err_str("Expr. parse failed."));
         }
@@ -489,7 +608,6 @@ static ASTTag type_of_infix(InfixOp op) {
         case INOP_INDEX:         return AST_INDEX;
         case INOP_ACCESS:        return AST_ACCESS;
 
-        case INOP__MAX:          return AST__NULL;
         case INOP__NULL:         return AST__NULL;
     }
 }
@@ -555,7 +673,7 @@ static ASTRef parse_access(Parser* par, ASTRef parent) {
 }
 
 static ASTRef parse_led(Parser* par, ASTRef left, int8_t lbp) {
-    InfixOp op = infix_op_of(peek(par).tag);
+    InfixOp op = infix_op(peek(par).tag);
     pop_token(par);
     switch (op) {
         case INOP_CALL:   return parse_call(par, left);
@@ -586,12 +704,12 @@ ASTRef parse_expression(Parser* par, int8_t rbp) {
     }
     
     while (true) {
-        InfixOp op = infix_op_of(peek(par).tag);
+        InfixOp op = infix_op(peek(par).tag);
         if (op == INOP__NULL) return left;
 
-        uint8_t lbp = bind_pow_of(op);
-        Assoc assoc = assoc_of(op);
-        if (assoc == ASSOC_LEFT) {
+        uint8_t lbp = bind_pow(op);
+        bool assoc = left_assoc(op);
+        if (assoc) {
             if (lbp <= rbp) break;
         } else {
             if (lbp < rbp) break;
@@ -953,7 +1071,5 @@ void print_ast(ASTRef ast, size_t depth) {
         case AST_RETURN: print_return(ast.node, depth); return;
 
         case AST__NULL: printf("NULL\n"); return;
-        case AST__COUNT: printf("COUNT\n"); return;
-        case AST__MAX: printf("MAX\n"); return;
     }
 }
