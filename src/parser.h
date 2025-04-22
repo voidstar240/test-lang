@@ -20,6 +20,10 @@ typedef struct { // TODO use some form of map for better perf
     uint32_t len;
 } StringTable;
 
+typedef uint32_t NodeIndex;
+typedef uint32_t ExtraIndex;
+typedef uint8_t ExtraData[8];
+
 typedef struct {
     size_t start; // TODO would token index be more useful?
     uint8_t data[8];
@@ -28,11 +32,11 @@ typedef struct {
 typedef struct {
     uint8_t* node_tags;
     NodeData* node_datas;
-    uint32_t nodes_cap;
-    uint32_t nodes_len;
-    uint8_t (*extra_data)[8];
-    uint32_t extra_cap;
-    uint32_t extra_len;
+    NodeIndex nodes_cap;
+    NodeIndex nodes_len;
+    ExtraData* extra_data;
+    ExtraIndex extra_cap;
+    ExtraIndex extra_len;
 } AST;
 
 typedef struct {
@@ -173,7 +177,7 @@ static inline bool valid_ast(ASTRef ast) {
 }
 
 void print_ast(ASTRef ast, size_t depth);
-void print_ast2(AST* ast, uint32_t index, StringTable* strs, uint32_t depth);
+void print_ast2(AST* ast, NodeIndex index, StringTable* strs, uint32_t depth);
 
 
 typedef enum {
