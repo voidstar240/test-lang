@@ -4,7 +4,9 @@
 #include <llvm-c/Core.h>
 
 #include "array_list.h"
-#include "parser.h"
+//#include "parser.h"
+
+// TODO this whole file needs to be updated to work with new AST representation
 
 typedef struct {
     ArrayList inner;
@@ -74,6 +76,7 @@ static inline CodeGen codegen_init(void) {
 void codegen_init_prim_types(CodeGen* cg);
 void codegen_init_module(CodeGen* cg, const char* name);
 
-void gen_function(CodeGen* cg, FunctionDeclAST* fn_ast);
+// REMOVED: uses old AST representation
+//void gen_function(CodeGen* cg, FunctionDeclAST* fn_ast);
 
 #endif

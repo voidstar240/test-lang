@@ -3,10 +3,9 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "scanner.h"
-#include "array_list.h"
-#include "alloc.h"
 #include "str.h"
 
 typedef uint32_t TokenIndex;
@@ -71,7 +70,7 @@ typedef struct {
 typedef enum {
     AST__NULL,
 
-    AST_LITERAL,
+    AST_NUMBER,
     AST_SYMBOL,
 
     AST_UNARY_BOOL_NOT,
@@ -98,109 +97,7 @@ typedef enum {
     AST_FUNCTION_DECL,
     AST_VAR_DECL,
     AST_RETURN,
-} ASTTag;
-
-typedef struct {
-    ASTTag type;
-    void* node;
-} ASTRef;
-
-typedef struct {
-    int64_t number;
-} LiteralAST;
-
-typedef struct {
-    Str name;
-} SymbolAST;
-
-typedef struct {
-    ASTRef inner;
-} UnaryAST;
-
-typedef struct {
-    ASTRef lhs;
-    ASTRef rhs;
-} BinaryAST;
-
-typedef struct {
-    ASTRef callee;
-    ASTRef* args;
-    uint8_t args_len;
-} CallAST;
-
-typedef struct {
-    ASTRef item;
-    ASTRef index;
-} IndexAST;
-
-typedef struct {
-    ASTRef parent;
-    SymbolAST* child;
-} AccessAST;
-
-typedef struct {
-    Str name;
-    Str type;
-} Param;
-
-typedef struct {
-    Str name;
-    Param* params;
-    size_t params_len;
-    Str ret_type;
-    ASTRef* statements;
-    size_t statements_len;
-} FunctionDeclAST;
-
-typedef struct {
-    Str name;
-    Str type;
-    ASTRef expr;
-} VarDeclAST;
-
-typedef struct {
-    ASTRef expr;
-} ReturnAST;
-
-static inline bool valid_ast(ASTRef ast) {
-    return (ast.type != AST__NULL) && (ast.node != NULL);
-}
-
-void print_ast(ASTRef ast, size_t depth);
-void print_ast2(const char* src, AST* ast, NodeIndex index, uint32_t depth);
-
-
-typedef enum {
-    ERR__NULL =      0x00,
-
-    ERR_UNEXPECTED = 0x01,
-    ERR_BAD_OP =     0x02,
-
-    ERR_GENERIC =    0x10,
-} ParseErrorType;
-
-typedef struct {
-    ParseErrorType type;
-    Token tok;
-    union {
-        struct {
-            const char* msg;
-        } generic;
-        struct {
-            TokenTag expected[8];
-        } unexpected;
-    } data;
-} ParseError;
-
-static inline bool valid_err(ParseError err) {
-    return err.type == ERR__NULL;
-}
-
-static inline bool is_src_err(ParseError err) {
-    return (err.type >= ERR_UNEXPECTED) && (err.type < ERR_GENERIC);
-}
-
-void print_err(ParseError err);
+} NodeTag;
 
 
 typedef struct {
@@ -208,18 +105,13 @@ typedef struct {
     uint32_t src_len;
     TokenIndex cur_token;
     AST ast;
-    ArrayList errs;
-    Alloc* str_alloc;
-    Alloc* node_alloc;
 } Parser;
 
 static inline Parser parser_init(
     const char* src,
     uint32_t src_len,
     const Token* tkns,
-    uint32_t tkns_len,
-    Alloc* str_alloc,
-    Alloc* node_alloc
+    uint32_t tkns_len
 ) {
     return (Parser){
         .src = src,
@@ -236,19 +128,11 @@ static inline Parser parser_init(
             .extra_cap = 64,
             .extra_len = 1,
         },
-        .errs = arrlist_init(ParseError),
-
-        .str_alloc = str_alloc,
-        .node_alloc = node_alloc,
     };
 }
 
 uint32_t parse_expr(Parser* par, uint8_t r_bp);
+uint32_t parse_function_decl(Parser* par);
 
-uint32_t parse_function_decl2(Parser* par);
-
-LiteralAST* parse_literal(Parser* par);
-ASTRef parse_expression(Parser* par, int8_t rbp);
-ASTRef parse_function_decl(Parser* par);
-
+void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth);
 #endif
