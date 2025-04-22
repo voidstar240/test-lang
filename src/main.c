@@ -15,10 +15,24 @@ int interp(const char* data, size_t len) {
 
     uint32_t tkns_len = 0;
     Token* tkns = scan_src(data, &tkns_len);
+    printf("\nDebug Token Output:\n");
     debug_print_tokens(data, tkns, tkns_len);
 
-    Parser par = parser_init(data, len, tkns, tkns_len, (Alloc*)&str_alloc, (Alloc*)&node_alloc);
-    ASTRef fn_decl = parse_function_decl(&par);
+    printf("\nDebug AST Output:\n");
+    Parser par = parser_init(
+        data,
+        len,
+        tkns,
+        tkns_len,
+        (Alloc*)&str_alloc,
+        (Alloc*)&node_alloc
+    );
+    uint32_t expr = parse_expr(&par, 0);
+    print_ast2(&par.ast, expr, &par.strings, 0);
+    printf("\n");
+
+    return 0;
+    /*ASTRef fn_decl = parse_function_decl(&par);
     printf("\n");
     if (par.errs.len == 0) {
         printf("No Errors\n\n");
@@ -38,7 +52,7 @@ int interp(const char* data, size_t len) {
         printf("Syntax Tree:\n");
         print_ast(fn_decl, 0);
         return 1;
-    }
+    }*/
 }
 
 int repl(void) {

@@ -401,6 +401,99 @@ uint32_t parse_function_decl2(Parser *par) {
     return insert_node_ast(&par->ast, AST_FUNCTION_DECL, *(NodeData*)&data);
 }
 
+static inline void print_indent(size_t depth) {
+    for (size_t i = 0; i < depth; i++) {
+        printf("  ");
+    }
+}
+
+static void print_number(NodeData data) {
+    printf("Number(%lu)\n", ((NodeDataNumber*)&data)->value);
+}
+
+static void print_string(NodeData data, StringTable* strs) {
+    StringData str = strs->strings[((NodeDataString*)&data)->str_id];
+    printf("String(%.*s)\n", (int)str.len, str.bytes);
+}
+
+static void print_unary2(
+    AST* ast,
+    uint32_t index,
+    StringTable* strs,
+    uint32_t depth,
+    const char* name
+) {
+    printf("Unary %s {\n", name);
+    NodeDataUnary data = *(NodeDataUnary*)&ast->node_datas[index];
+    print_indent(depth + 1);
+    printf("expr = ");
+    print_ast2(ast, data.expr, strs, depth + 1);
+    print_indent(depth);
+    printf("}\n");
+}
+
+static void print_binary2(
+    AST* ast,
+    uint32_t index,
+    StringTable* strs,
+    uint32_t depth,
+    const char* name
+) {
+    printf("Binary %s {\n", name);
+    NodeDataBinary data = *(NodeDataBinary*)&ast->node_datas[index];
+    print_indent(depth + 1);
+    printf("lhs = ");
+    print_ast2(ast, data.lhs, strs, depth + 1);
+    print_indent(depth + 1);
+    printf("rhs = ");
+    print_ast2(ast, data.rhs, strs, depth + 1);
+    print_indent(depth);
+    printf("}\n");
+}
+
+void print_ast2(AST* ast, uint32_t index, StringTable* strs, uint32_t depth) {
+    if (ast->nodes_len <= index) { return; }
+
+    switch (ast->node_tags[index]) {
+        case AST_LITERAL:
+            print_number(ast->node_datas[index]); return;
+        case AST_SYMBOL:
+            print_string(ast->node_datas[index], strs); return;
+        case AST_UNARY_BOOL_NOT:
+            print_unary2(ast, index, strs, depth, "!"); return;
+        case AST_UNARY_BIT_NOT:
+            print_unary2(ast, index, strs, depth, "~"); return;
+        case AST_UNARY_NEGATE:
+            print_unary2(ast, index, strs, depth, "-"); return;
+        case AST_BINARY_ASSIGN:
+            print_binary2(ast, index, strs, depth, "="); return;
+        case AST_BINARY_EQUAL:
+            print_binary2(ast, index, strs, depth, "=="); return;
+        case AST_BINARY_NOT_EQUAL:
+            print_binary2(ast, index, strs, depth, "!="); return;
+        case AST_BINARY_LESS:
+            print_binary2(ast, index, strs, depth, "<"); return;
+        case AST_BINARY_LESS_EQUAL:
+            print_binary2(ast, index, strs, depth, "<="); return;
+        case AST_BINARY_GREATER:
+            print_binary2(ast, index, strs, depth, ">"); return;
+        case AST_BINARY_GREATER_EQUAL:
+            print_binary2(ast, index, strs, depth, ">="); return;
+        case AST_BINARY_ADD:
+            print_binary2(ast, index, strs, depth, "+"); return;
+        case AST_BINARY_SUB:
+            print_binary2(ast, index, strs, depth, "-"); return;
+        case AST_BINARY_MUL:
+            print_binary2(ast, index, strs, depth, "*"); return;
+        case AST_BINARY_DIV:
+            print_binary2(ast, index, strs, depth, "/"); return;
+        case AST_BINARY_MOD:
+            print_binary2(ast, index, strs, depth, "%"); return;
+        case AST__NULL: printf("NULL\n"); return;
+        default: printf("UNIMPLEMENTED"); return;
+    }
+}
+
 
 
 
@@ -898,22 +991,6 @@ ASTRef parse_function_decl(Parser* par) {
     fn->statements_len = statements.len;
 
     return (ASTRef){ .node = fn, .type = AST_FUNCTION_DECL, };
-}
-
-static void print_indent(size_t depth) {
-    /*for (size_t i = 1; i < depth; i++) {
-        printf("│   ");
-    }
-    if (depth > 0) {
-        if (last) {
-            printf("└── ");
-        } else {
-            printf("├── ");
-        }
-    }*/
-    for (size_t i = 0; i < depth; i++) {
-        printf("  ");
-    }
 }
 
 static void print_literal(const LiteralAST* lit) {

@@ -173,6 +173,7 @@ static inline bool valid_ast(ASTRef ast) {
 }
 
 void print_ast(ASTRef ast, size_t depth);
+void print_ast2(AST* ast, uint32_t index, StringTable* strs, uint32_t depth);
 
 
 typedef enum {
@@ -222,7 +223,14 @@ typedef struct {
     Alloc* node_alloc;
 } Parser;
 
-static inline Parser parser_init(const char* src, uint32_t src_len, Token* tkns, uint32_t tkns_len, Alloc* str_alloc, Alloc* node_alloc) {
+static inline Parser parser_init(
+    const char* src,
+    uint32_t src_len,
+    Token* tkns,
+    uint32_t tkns_len,
+    Alloc* str_alloc,
+    Alloc* node_alloc
+) {
     return (Parser){
         .src = src,
         .src_len = src_len,
