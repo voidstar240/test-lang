@@ -7,40 +7,6 @@
 #include "scanner.h"
 
 // TODO return error instead of printf/exit
-static uint32_t insert_new_string(
-    StringTable* table,
-    const char* bytes,
-    size_t len
-) {
-    if (table->len >= table->cap) { // grow
-        size_t new_cap = 2UL * (size_t)table->cap;
-        if (new_cap > 0xFFFFFFFFUL) { // overflow table->cap
-            fprintf(stderr, "Too many strings!");
-            exit(1);
-        }
-        table->strings = realloc(table->strings, new_cap);
-        table->cap = new_cap;
-    }
-    table->strings[table->len] = (StringData) { .bytes = bytes, .len = len };
-    return table->len++;
-}
-
-static uint32_t insert_string(
-    StringTable* table,
-    const char* bytes,
-    size_t len
-) {
-    for (uint32_t i = 0; i < table->len; i++) { // check for existing string
-        if (table->strings[i].len != len) { continue; }
-        if (strncmp(table->strings[i].bytes, bytes, len) == 0) {
-            return i;
-        }
-    }
-    return insert_new_string(table, bytes, len);
-}
-
-
-// TODO return error instead of printf/exit
 static NodeIndex insert_node_ast(AST* ast, ASTTag tag, NodeData data) {
     if (ast->nodes_len == ast->nodes_cap) { // grow
         size_t new_cap = 2UL * (size_t)ast->nodes_cap; // TODO dont assume size_t larger than NodeIndex
@@ -81,14 +47,14 @@ static ExtraIndex insert_extra_ast(AST* ast, ExtraData* extra, ExtraIndex len) {
 }
 
 static inline Token peek(Parser* par) {
-    return par->tkns[par->tkn_index];
+    return par->ast.tokens[par->cur_token];
 }
 
 static inline Token pop_token(Parser* par) {
     // TODO prevent overrunning tkns
     Token out;
     do {
-        out = par->tkns[++par->tkn_index];
+        out = par->ast.tokens[++par->cur_token];
         // ignore comments
     } while (!tkn_is_parsed(out) && !tkn_is_err(out));
     return out;
@@ -238,7 +204,7 @@ static uint64_t str_to_uint(const char* str, uint32_t len) {
 
 static NodeIndex parse_number(Parser* par) {
     const Token num = peek(par);
-    const TokenIndex tkn_index = par->tkn_index;
+    const TokenIndex tkn_index = par->cur_token;
     if (!match_token(par, TKN_NUMBER)) {
         exit(1);
         // TODO handle error
@@ -253,23 +219,21 @@ static NodeIndex parse_number(Parser* par) {
 }
 
 static NodeIndex parse_symbol2(Parser* par) {
-    const Token sym = peek(par);
-    const TokenIndex tkn_index = par->tkn_index;
+    const TokenIndex tkn_index = par->cur_token;
     if (!match_token(par, TKN_IDENTIFIER)) {
         // TODO handle error
         exit(1);
         return 0;
     }
-    const NodeDataString data = {
+    const NodeData data = {
         .token = tkn_index,
-        .str_id = insert_string(&par->strings, &par->src[sym.start], sym.len),
     };
-    return insert_node_ast(&par->ast, AST_SYMBOL, *(NodeData*)&data);
+    return insert_node_ast(&par->ast, AST_SYMBOL, data);
 }
 
 static NodeIndex parse_expr_lhs(Parser* par, uint8_t r_bp) {
     const Token tkn = peek(par);
-    const TokenIndex tkn_index = par->tkn_index;
+    const TokenIndex tkn_index = par->cur_token;
     if (tkn_is_err(tkn)) {
         // TODO handle error
         exit(1);
@@ -313,7 +277,7 @@ NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
     
     while (true) {
         const Token op_tkn = peek(par);
-        const TokenIndex tkn_index = par->tkn_index;
+        const TokenIndex tkn_index = par->cur_token;
         if (tkn_is_err(op_tkn)) {
             // TODO handle error
             exit(1);
@@ -361,8 +325,7 @@ NodeIndex parse_function_decl2(Parser *par) {
         return 0; // TODO communicate error and sync
     }
 
-    const Token name = peek(par);
-    const TokenIndex name_index = par->tkn_index;
+    const TokenIndex name_index = par->cur_token;
     if (!match_token(par, TKN_IDENTIFIER)) {
         return 0;
     }
@@ -386,11 +349,6 @@ NodeIndex parse_function_decl2(Parser *par) {
         return 0;
     }
 
-    const uint32_t name_id = insert_string(
-        &par->strings,
-        &par->src[name.start],
-        name.len);
-
     const NodeExtraFunctionPrototype extra = {
         .param_count = 0,
     };
@@ -398,7 +356,6 @@ NodeIndex parse_function_decl2(Parser *par) {
 
     const NodeDataFunctionPrototype data =  {
         .token = name_index,
-        .name_id = name_id,
         .extra = extra_id,
     };
     // TODO CHANGE THE AST TAG TYPE
@@ -415,15 +372,16 @@ static void print_number(NodeData data) {
     printf("Number(%lu)\n", ((NodeDataNumber*)&data)->value);
 }
 
-static void print_string(NodeData data, StringTable* strs) {
-    StringData str = strs->strings[((NodeDataString*)&data)->str_id];
-    printf("String(%.*s)\n", (int)str.len, str.bytes);
+static void print_string(const char* src, AST* ast, NodeIndex index) {
+    const char* str = &src[ast->tokens[ast->node_datas[index].token].start];
+    const uint32_t len = ast->tokens[ast->node_datas[index].token].len;
+    printf("String(%.*s)\n", (int)len, str);
 }
 
 static void print_unary2(
+    const char* src,
     AST* ast,
     NodeIndex index,
-    StringTable* strs,
     uint32_t depth,
     const char* name
 ) {
@@ -431,15 +389,15 @@ static void print_unary2(
     NodeDataUnary data = *(NodeDataUnary*)&ast->node_datas[index];
     print_indent(depth + 1);
     printf("expr = ");
-    print_ast2(ast, data.expr, strs, depth + 1);
+    print_ast2(src, ast, data.expr, depth + 1);
     print_indent(depth);
     printf("}\n");
 }
 
 static void print_binary2(
+    const char* src,
     AST* ast,
     NodeIndex index,
-    StringTable* strs,
     uint32_t depth,
     const char* name
 ) {
@@ -447,52 +405,52 @@ static void print_binary2(
     NodeDataBinary data = *(NodeDataBinary*)&ast->node_datas[index];
     print_indent(depth + 1);
     printf("lhs = ");
-    print_ast2(ast, data.lhs, strs, depth + 1);
+    print_ast2(src, ast, data.lhs, depth + 1);
     print_indent(depth + 1);
     printf("rhs = ");
-    print_ast2(ast, data.rhs, strs, depth + 1);
+    print_ast2(src, ast, data.rhs, depth + 1);
     print_indent(depth);
     printf("}\n");
 }
 
-void print_ast2(AST* ast, NodeIndex index, StringTable* strs, uint32_t depth) {
+void print_ast2(const char* src, AST* ast, NodeIndex index, uint32_t depth) {
     if (ast->nodes_len <= index) { return; }
 
     switch (ast->node_tags[index]) {
         case AST_LITERAL:
             print_number(ast->node_datas[index]); return;
         case AST_SYMBOL:
-            print_string(ast->node_datas[index], strs); return;
+            print_string(src, ast, index); return;
         case AST_UNARY_BOOL_NOT:
-            print_unary2(ast, index, strs, depth, "!"); return;
+            print_unary2(src, ast, index, depth, "!"); return;
         case AST_UNARY_BIT_NOT:
-            print_unary2(ast, index, strs, depth, "~"); return;
+            print_unary2(src, ast, index, depth, "~"); return;
         case AST_UNARY_NEGATE:
-            print_unary2(ast, index, strs, depth, "-"); return;
+            print_unary2(src, ast, index, depth, "-"); return;
         case AST_BINARY_ASSIGN:
-            print_binary2(ast, index, strs, depth, "="); return;
+            print_binary2(src, ast, index, depth, "="); return;
         case AST_BINARY_EQUAL:
-            print_binary2(ast, index, strs, depth, "=="); return;
+            print_binary2(src, ast, index, depth, "=="); return;
         case AST_BINARY_NOT_EQUAL:
-            print_binary2(ast, index, strs, depth, "!="); return;
+            print_binary2(src, ast, index, depth, "!="); return;
         case AST_BINARY_LESS:
-            print_binary2(ast, index, strs, depth, "<"); return;
+            print_binary2(src, ast, index, depth, "<"); return;
         case AST_BINARY_LESS_EQUAL:
-            print_binary2(ast, index, strs, depth, "<="); return;
+            print_binary2(src, ast, index, depth, "<="); return;
         case AST_BINARY_GREATER:
-            print_binary2(ast, index, strs, depth, ">"); return;
+            print_binary2(src, ast, index, depth, ">"); return;
         case AST_BINARY_GREATER_EQUAL:
-            print_binary2(ast, index, strs, depth, ">="); return;
+            print_binary2(src, ast, index, depth, ">="); return;
         case AST_BINARY_ADD:
-            print_binary2(ast, index, strs, depth, "+"); return;
+            print_binary2(src, ast, index, depth, "+"); return;
         case AST_BINARY_SUB:
-            print_binary2(ast, index, strs, depth, "-"); return;
+            print_binary2(src, ast, index, depth, "-"); return;
         case AST_BINARY_MUL:
-            print_binary2(ast, index, strs, depth, "*"); return;
+            print_binary2(src, ast, index, depth, "*"); return;
         case AST_BINARY_DIV:
-            print_binary2(ast, index, strs, depth, "/"); return;
+            print_binary2(src, ast, index, depth, "/"); return;
         case AST_BINARY_MOD:
-            print_binary2(ast, index, strs, depth, "%"); return;
+            print_binary2(src, ast, index, depth, "%"); return;
         case AST__NULL: printf("NULL\n"); return;
         default: printf("UNIMPLEMENTED"); return;
     }

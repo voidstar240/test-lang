@@ -9,18 +9,18 @@
 #include "parser.h"
 #include "codegen.h"
 
-int interp(const char* data, size_t len) {
+int interp(const char* src, size_t len) {
     ArenaAlloc str_alloc = alloc_arena_init(alloc_system(), 1048576);
     ArenaAlloc node_alloc = alloc_arena_init(alloc_system(), 1048576);
 
     uint32_t tkns_len = 0;
-    Token* tkns = scan_src(data, &tkns_len);
+    Token* tkns = scan_src(src, &tkns_len);
     printf("\nDebug Token Output:\n");
-    debug_print_tokens(data, tkns, tkns_len);
+    debug_print_tokens(src, tkns, tkns_len);
 
     printf("\nDebug AST Output:\n");
     Parser par = parser_init(
-        data,
+        src,
         len,
         tkns,
         tkns_len,
@@ -28,7 +28,7 @@ int interp(const char* data, size_t len) {
         (Alloc*)&node_alloc
     );
     uint32_t expr = parse_expr(&par, 0);
-    print_ast2(&par.ast, expr, &par.strings, 0);
+    print_ast2(src, &par.ast, expr, 0);
     printf("\n");
 
     return 0;
