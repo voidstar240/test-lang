@@ -41,9 +41,9 @@ static uint32_t insert_string(
 
 
 // TODO return error instead of printf/exit
-static uint32_t insert_node_ast(AST* ast, ASTTag tag, NodeData data) {
+static NodeIndex insert_node_ast(AST* ast, ASTTag tag, NodeData data) {
     if (ast->nodes_len == ast->nodes_cap) { // grow
-        size_t new_cap = 2UL * (size_t)ast->nodes_cap;
+        size_t new_cap = 2UL * (size_t)ast->nodes_cap; // TODO dont assume size_t larger than NodeIndex
         if (new_cap > 0xFFFFFFFFUL) { // overflow ast->nodes_cap
             fprintf(stderr, "Too many AST nodes!");
             exit(1);
@@ -58,14 +58,14 @@ static uint32_t insert_node_ast(AST* ast, ASTTag tag, NodeData data) {
 }
 
 // TODO return error instead of printf/exit
-static uint32_t insert_extra_ast(AST* ast, uint8_t (*extra)[8], uint32_t len) {
+static ExtraIndex insert_extra_ast(AST* ast, ExtraData* extra, ExtraIndex len) {
     if ((ast->extra_len & len) >> 31) { // overflow ast->extra_len
             fprintf(stderr, "Too much AST extra data!");
             exit(1);
     }
-    uint32_t new_len = ast->extra_len + len;
+    ExtraIndex new_len = ast->extra_len + len;
     if (new_len >= ast->extra_cap) { // grow
-        size_t new_cap = 2UL * (size_t)ast->extra_cap;
+        size_t new_cap = 2UL * (size_t)ast->extra_cap; // TODO dont assume size_t larger than ExtraIndex
         while ((size_t)new_len >= new_cap) { new_cap *= 2; }
         if (new_cap > 0xFFFFFFFFUL) { // overflow ast->nodes_cap
             fprintf(stderr, "Too much AST extra data!");
@@ -75,7 +75,7 @@ static uint32_t insert_extra_ast(AST* ast, uint8_t (*extra)[8], uint32_t len) {
         ast->extra_cap = new_cap;
     }
     memcpy(&ast->extra_data[ast->extra_len], extra, len * 8);
-    uint32_t pos = ast->extra_len;
+    ExtraIndex pos = ast->extra_len;
     ast->extra_len = new_len;
     return pos;
 }
@@ -236,7 +236,7 @@ static uint64_t str_to_uint(const char* str, uint32_t len) {
     return val;
 }
 
-static uint32_t parse_number(Parser* par) {
+static NodeIndex parse_number(Parser* par) {
     const Token num = peek(par);
     if (!match_token(par, TKN_NUMBER)) {
         exit(1);
@@ -251,7 +251,7 @@ static uint32_t parse_number(Parser* par) {
     return insert_node_ast(&par->ast, AST_LITERAL, *(NodeData*)&data);
 }
 
-static uint32_t parse_symbol2(Parser* par) {
+static NodeIndex parse_symbol2(Parser* par) {
     const Token sym = peek(par);
     if (!match_token(par, TKN_IDENTIFIER)) {
         // TODO handle error
@@ -265,7 +265,7 @@ static uint32_t parse_symbol2(Parser* par) {
     return insert_node_ast(&par->ast, AST_SYMBOL, *(NodeData*)&data);
 }
 
-static uint32_t parse_expr_lhs(Parser* par, uint8_t r_bp) {
+static NodeIndex parse_expr_lhs(Parser* par, uint8_t r_bp) {
     Token l_tkn = peek(par);
     if (tkn_is_err(l_tkn)) {
         // TODO handle error
@@ -275,7 +275,7 @@ static uint32_t parse_expr_lhs(Parser* par, uint8_t r_bp) {
     const PrefixOp op = prefix_op(l_tkn.tag);
     if (op) {
         pop_token(par);
-        const uint32_t expr = parse_expr(par, bind_pow(op));
+        const NodeIndex expr = parse_expr(par, bind_pow(op));
         const NodeDataUnary data = {
             .start = l_tkn.start,
             .expr = expr,
@@ -289,7 +289,7 @@ static uint32_t parse_expr_lhs(Parser* par, uint8_t r_bp) {
             return parse_symbol2(par);
         case TKN_L_PAREN:
             pop_token(par);
-            const uint32_t lhs = parse_expr(par, 0);
+            const NodeIndex lhs = parse_expr(par, 0);
             if (!match_token(par, TKN_R_PAREN)) {
                 // TODO handle error
                 exit(1);
@@ -301,8 +301,8 @@ static uint32_t parse_expr_lhs(Parser* par, uint8_t r_bp) {
     }
 }
 
-uint32_t parse_expr(Parser* par, uint8_t r_bp) {
-    uint32_t lhs = parse_expr_lhs(par, r_bp);
+NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
+    NodeIndex lhs = parse_expr_lhs(par, r_bp);
     if (lhs == 0) {
         // TODO handle error
         exit(1);
@@ -338,7 +338,7 @@ uint32_t parse_expr(Parser* par, uint8_t r_bp) {
                 // TODO parse access
                 break;
             default:;
-                const uint32_t rhs = parse_expr(par, bind_pow(op));
+                const NodeIndex rhs = parse_expr(par, bind_pow(op));
                 const NodeDataBinary data = {
                     .start = op_tkn.start,
                     .lhs = lhs,
@@ -352,7 +352,7 @@ uint32_t parse_expr(Parser* par, uint8_t r_bp) {
     return lhs;
 }
 
-uint32_t parse_function_decl2(Parser *par) {
+NodeIndex parse_function_decl2(Parser *par) {
     const size_t start = peek(par).start;
     if (!match_token(par, TKN_FN)) {
         return 0; // TODO communicate error and sync
@@ -390,7 +390,7 @@ uint32_t parse_function_decl2(Parser *par) {
     const NodeExtraFunctionPrototype extra = {
         .param_count = 0,
     };
-    uint32_t extra_id = insert_extra_ast(&par->ast, (uint8_t(*)[8])&extra, 1);
+    ExtraIndex extra_id = insert_extra_ast(&par->ast, (uint8_t(*)[8])&extra, 1);
 
     const NodeDataFunctionPrototype data =  {
         .start = start,
@@ -418,7 +418,7 @@ static void print_string(NodeData data, StringTable* strs) {
 
 static void print_unary2(
     AST* ast,
-    uint32_t index,
+    NodeIndex index,
     StringTable* strs,
     uint32_t depth,
     const char* name
@@ -434,7 +434,7 @@ static void print_unary2(
 
 static void print_binary2(
     AST* ast,
-    uint32_t index,
+    NodeIndex index,
     StringTable* strs,
     uint32_t depth,
     const char* name
@@ -451,7 +451,7 @@ static void print_binary2(
     printf("}\n");
 }
 
-void print_ast2(AST* ast, uint32_t index, StringTable* strs, uint32_t depth) {
+void print_ast2(AST* ast, NodeIndex index, StringTable* strs, uint32_t depth) {
     if (ast->nodes_len <= index) { return; }
 
     switch (ast->node_tags[index]) {
