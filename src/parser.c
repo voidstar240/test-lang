@@ -238,13 +238,14 @@ static uint64_t str_to_uint(const char* str, uint32_t len) {
 
 static NodeIndex parse_number(Parser* par) {
     const Token num = peek(par);
+    const TokenIndex tkn_index = par->tkn_index;
     if (!match_token(par, TKN_NUMBER)) {
         exit(1);
         // TODO handle error
         return 0;
     }
     const NodeDataNumber data = {
-        .start = num.start,
+        .token = tkn_index,
         .value = str_to_uint(&par->src[num.start], num.len),
     };
     // TODO change AST_LITERAL to number
@@ -253,36 +254,38 @@ static NodeIndex parse_number(Parser* par) {
 
 static NodeIndex parse_symbol2(Parser* par) {
     const Token sym = peek(par);
+    const TokenIndex tkn_index = par->tkn_index;
     if (!match_token(par, TKN_IDENTIFIER)) {
         // TODO handle error
         exit(1);
         return 0;
     }
     const NodeDataString data = {
-        .start = sym.start,
+        .token = tkn_index,
         .str_id = insert_string(&par->strings, &par->src[sym.start], sym.len),
     };
     return insert_node_ast(&par->ast, AST_SYMBOL, *(NodeData*)&data);
 }
 
 static NodeIndex parse_expr_lhs(Parser* par, uint8_t r_bp) {
-    Token l_tkn = peek(par);
-    if (tkn_is_err(l_tkn)) {
+    const Token tkn = peek(par);
+    const TokenIndex tkn_index = par->tkn_index;
+    if (tkn_is_err(tkn)) {
         // TODO handle error
         exit(1);
     }
     
-    const PrefixOp op = prefix_op(l_tkn.tag);
+    const PrefixOp op = prefix_op(tkn.tag);
     if (op) {
         pop_token(par);
         const NodeIndex expr = parse_expr(par, bind_pow(op));
         const NodeDataUnary data = {
-            .start = l_tkn.start,
+            .token = tkn_index,
             .expr = expr,
         };
         const ASTTag tag = (op - PREOP_BOOL_NOT) + AST_UNARY_BOOL_NOT;
         return insert_node_ast(&par->ast, tag, *(NodeData*)&data);
-    } else switch (l_tkn.tag) {
+    } else switch (tkn.tag) {
         case TKN_NUMBER:
             return parse_number(par);
         case TKN_IDENTIFIER:
@@ -310,6 +313,7 @@ NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
     
     while (true) {
         const Token op_tkn = peek(par);
+        const TokenIndex tkn_index = par->tkn_index;
         if (tkn_is_err(op_tkn)) {
             // TODO handle error
             exit(1);
@@ -340,7 +344,7 @@ NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
             default:;
                 const NodeIndex rhs = parse_expr(par, bind_pow(op));
                 const NodeDataBinary data = {
-                    .start = op_tkn.start,
+                    .token = tkn_index,
                     .lhs = lhs,
                     .rhs = rhs,
                 };
@@ -353,12 +357,12 @@ NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
 }
 
 NodeIndex parse_function_decl2(Parser *par) {
-    const size_t start = peek(par).start;
     if (!match_token(par, TKN_FN)) {
         return 0; // TODO communicate error and sync
     }
 
     const Token name = peek(par);
+    const TokenIndex name_index = par->tkn_index;
     if (!match_token(par, TKN_IDENTIFIER)) {
         return 0;
     }
@@ -393,7 +397,7 @@ NodeIndex parse_function_decl2(Parser *par) {
     ExtraIndex extra_id = insert_extra_ast(&par->ast, (uint8_t(*)[8])&extra, 1);
 
     const NodeDataFunctionPrototype data =  {
-        .start = start,
+        .token = name_index,
         .name_id = name_id,
         .extra = extra_id,
     };

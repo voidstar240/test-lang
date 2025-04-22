@@ -20,13 +20,14 @@ typedef struct { // TODO use some form of map for better perf
     uint32_t len;
 } StringTable;
 
+typedef uint32_t TokenIndex;
 typedef uint32_t NodeIndex;
 typedef uint32_t ExtraIndex;
-typedef uint8_t ExtraData[8];
+typedef uint8_t  ExtraData[8];
 
 typedef struct {
-    size_t start; // TODO would token index be more useful?
-    uint8_t data[8];
+    TokenIndex token;
+    uint8_t data[12];
 } NodeData;
 
 typedef struct {
@@ -40,37 +41,40 @@ typedef struct {
 } AST;
 
 typedef struct {
-    size_t start;
+    TokenIndex token;
+    uint8_t _pad[4];
     uint64_t value;
 } NodeDataNumber;
 
 typedef struct {
-    size_t start;
+    TokenIndex token;
     uint32_t str_id;
-    uint8_t _pad[4];
+    uint8_t _pad[8];
 } NodeDataString;
 
 typedef struct {
-    size_t start;
-    uint32_t expr;
-    uint8_t _pad[4];
+    TokenIndex token;
+    NodeIndex expr;
+    uint8_t _pad[8];
 } NodeDataUnary;
 
 typedef struct {
-    size_t start;
-    uint32_t lhs;
-    uint32_t rhs;
+    TokenIndex token;
+    NodeIndex lhs;
+    NodeIndex rhs;
+    uint8_t _pad[4];
 } NodeDataBinary;
 
 typedef struct {
-    size_t start;
+    TokenIndex token;
     uint32_t name_id;
-    uint32_t extra;
+    ExtraIndex extra;
+    uint8_t _pad[4]; // TODO could store param count here
 } NodeDataFunctionPrototype;
 
 typedef struct {
     uint32_t name_id;
-    uint32_t expr;
+    NodeIndex expr;
 } FunctionPrototypeParam;
 
 typedef struct {
