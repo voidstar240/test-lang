@@ -4,31 +4,20 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "alloc.h"
 #include "scanner.h"
 #include "parser.h"
-#include "codegen.h"
+//#include "codegen.h"
 
 int interp(const char* src, size_t len) {
-    ArenaAlloc str_alloc = alloc_arena_init(alloc_system(), 1048576);
-    ArenaAlloc node_alloc = alloc_arena_init(alloc_system(), 1048576);
-
     uint32_t tkns_len = 0;
     Token* tkns = scan_src(src, &tkns_len);
     printf("\nDebug Token Output:\n");
     debug_print_tokens(src, tkns, tkns_len);
 
     printf("\nDebug AST Output:\n");
-    Parser par = parser_init(
-        src,
-        len,
-        tkns,
-        tkns_len,
-        (Alloc*)&str_alloc,
-        (Alloc*)&node_alloc
-    );
+    Parser par = parser_init(src, len, tkns, tkns_len);
     uint32_t expr = parse_expr(&par, 0);
-    print_ast2(src, &par.ast, expr, 0);
+    print_ast(src, &par.ast, expr, 0);
     printf("\n");
 
     return 0;

@@ -5,7 +5,7 @@
 #include <llvm-c/Types.h>
 
 #include "codegen.h"
-#include "parser.h"
+//#include "parser.h"
 
 LLVMTypeRef type_map_get(TypeMap* tm, const char* name) {
     struct Pair {
@@ -52,7 +52,7 @@ void codegen_init_module(CodeGen* cg, const char* name) {
     cg->build = LLVMCreateBuilderInContext(cg->ctx);
 }
 
-static LLVMValueRef gen_ast(CodeGen* cg, ASTRef ast);
+/*static LLVMValueRef gen_ast(CodeGen* cg, ASTRef ast);
 
 static LLVMValueRef gen_literal(CodeGen* cg, LiteralAST* lit) {
     return LLVMConstInt(type_map_get(&cg->types, "i32"), lit->number, 0);
@@ -108,7 +108,7 @@ static LLVMValueRef gen_return(CodeGen* cg, ReturnAST* ret) {
 
 static LLVMValueRef gen_ast(CodeGen* cg, ASTRef ast) {
     switch (ast.type) {
-        case AST_LITERAL: return gen_literal(cg, ast.node);
+        case AST_NUMBER: return gen_literal(cg, ast.node);
         case AST_SYMBOL: return gen_symbol(cg, ast.node);
 
 
@@ -185,4 +185,4 @@ void gen_function(CodeGen* cg, FunctionDeclAST* fn_ast) {
     printf("\nVERIFY ERROR: %d\n\n", out);
     char* mod_str = LLVMPrintModuleToString(cg->mod);
     printf("MODULE:\n%s\n\n", mod_str);
-}
+}*/
