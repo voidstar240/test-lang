@@ -9,17 +9,6 @@
 #include "alloc.h"
 #include "str.h"
 
-typedef struct {
-    const char* bytes;
-    size_t len;
-} StringData;
-
-typedef struct { // TODO use some form of map for better perf
-    StringData* strings;
-    uint32_t cap;
-    uint32_t len;
-} StringTable;
-
 typedef uint32_t TokenIndex;
 typedef uint32_t NodeIndex;
 typedef uint32_t ExtraIndex;
@@ -31,13 +20,17 @@ typedef struct {
 } NodeData;
 
 typedef struct {
-    uint8_t* node_tags;
-    NodeData* node_datas;
-    NodeIndex nodes_cap;
-    NodeIndex nodes_len;
-    ExtraData* extra_data;
-    ExtraIndex extra_cap;
-    ExtraIndex extra_len;
+    const Token* tokens;
+    TokenIndex   tokens_len;
+
+    uint8_t*     node_tags;
+    NodeData*    node_datas;
+    NodeIndex    nodes_cap;
+    NodeIndex    nodes_len;
+
+    ExtraData*   extra_data;
+    ExtraIndex   extra_cap;
+    ExtraIndex   extra_len;
 } AST;
 
 typedef struct {
@@ -45,12 +38,6 @@ typedef struct {
     uint8_t _pad[4];
     uint64_t value;
 } NodeDataNumber;
-
-typedef struct {
-    TokenIndex token;
-    uint32_t str_id;
-    uint8_t _pad[8];
-} NodeDataString;
 
 typedef struct {
     TokenIndex token;
@@ -67,9 +54,8 @@ typedef struct {
 
 typedef struct {
     TokenIndex token;
-    uint32_t name_id;
     ExtraIndex extra;
-    uint8_t _pad[4]; // TODO could store param count here
+    uint8_t _pad[8]; // TODO could store param count here
 } NodeDataFunctionPrototype;
 
 typedef struct {
@@ -181,7 +167,7 @@ static inline bool valid_ast(ASTRef ast) {
 }
 
 void print_ast(ASTRef ast, size_t depth);
-void print_ast2(AST* ast, NodeIndex index, StringTable* strs, uint32_t depth);
+void print_ast2(const char* src, AST* ast, NodeIndex index, uint32_t depth);
 
 
 typedef enum {
@@ -220,13 +206,9 @@ void print_err(ParseError err);
 typedef struct {
     const char* src;
     uint32_t src_len;
-    Token* tkns;
-    uint32_t tkns_len;
-    uint32_t tkn_index;
+    TokenIndex cur_token;
     AST ast;
-    StringTable strings;
     ArrayList errs;
-
     Alloc* str_alloc;
     Alloc* node_alloc;
 } Parser;
@@ -234,7 +216,7 @@ typedef struct {
 static inline Parser parser_init(
     const char* src,
     uint32_t src_len,
-    Token* tkns,
+    const Token* tkns,
     uint32_t tkns_len,
     Alloc* str_alloc,
     Alloc* node_alloc
@@ -242,15 +224,10 @@ static inline Parser parser_init(
     return (Parser){
         .src = src,
         .src_len = src_len,
-        .tkns = tkns,
-        .tkns_len = tkns_len,
-        .tkn_index = 0,
-        .strings = (StringTable) {
-            .strings = malloc(64),
-            .cap = 64,
-            .len = 0,
-        },
+        .cur_token = 0,
         .ast = (AST) {
+            .tokens = tkns,
+            .tokens_len = tkns_len,
             .node_tags = malloc(64),
             .node_datas = malloc(64 * sizeof(NodeData)),
             .nodes_cap = 64,
