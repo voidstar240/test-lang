@@ -8,14 +8,26 @@
 
 // TODO return error instead of printf/exit
 static NodeIndex insert_node_ast(AST* ast, NodeTag tag, NodeData data) {
-    if (ast->nodes_len == ast->nodes_cap) { // grow
-        size_t new_cap = 2UL * (size_t)ast->nodes_cap; // TODO dont assume size_t larger than NodeIndex
-        if (new_cap > 0xFFFFFFFFUL) { // overflow ast->nodes_cap
-            fprintf(stderr, "Too many AST nodes!");
+    if (ast->nodes_len >= ast->nodes_cap) { // grow
+        if (ast->nodes_cap >> 31) {
+            fprintf(stderr, "AST nodes_cap overflow!\n");
+            exit(1);
+        }
+        NodeIndex new_cap = 2 * ast->nodes_cap;
+        if ((size_t)new_cap > (SIZE_MAX / sizeof(NodeData))) {
+            fprintf(stderr, "AST nodes_cap overflows word size!\n");
             exit(1);
         }
         ast->node_tags = realloc(ast->node_tags, new_cap);
-        ast->node_datas = realloc(ast->node_datas, new_cap * sizeof(NodeData));
+        if (ast->node_tags == NULL) {
+            fprintf(stderr, "AST node_tags couldn't allocate memory!\n");
+            exit(1);
+        }
+        ast->node_datas = realloc(ast->node_datas, (size_t)new_cap * sizeof(NodeData));
+        if (ast->node_datas == NULL) {
+            fprintf(stderr, "AST node_datas couldn't allocate memory!\n");
+            exit(1);
+        }
         ast->nodes_cap = new_cap;
     }
     ast->node_tags[ast->nodes_len] = tag;
@@ -25,23 +37,33 @@ static NodeIndex insert_node_ast(AST* ast, NodeTag tag, NodeData data) {
 
 // TODO return error instead of printf/exit
 static ExtraIndex insert_extra_ast(AST* ast, ExtraData* extra, ExtraIndex len) {
-    if ((ast->extra_len & len) >> 31) { // overflow ast->extra_len
-            fprintf(stderr, "Too much AST extra data!");
-            exit(1);
+    if (ast->extra_len > (UINT32_MAX - len)) {
+        fprintf(stderr, "AST extra_len overflow!\n");
+        exit(1);
     }
     ExtraIndex new_len = ast->extra_len + len;
     if (new_len >= ast->extra_cap) { // grow
-        size_t new_cap = 2UL * (size_t)ast->extra_cap; // TODO dont assume size_t larger than ExtraIndex
-        while ((size_t)new_len >= new_cap) { new_cap *= 2; }
-        if (new_cap > 0xFFFFFFFFUL) { // overflow ast->nodes_cap
-            fprintf(stderr, "Too much AST extra data!");
+        ExtraIndex new_cap = ast->extra_cap;
+        do {
+            if (new_cap >> 31) {
+                fprintf(stderr, "AST extra_cap overflow!\n");
+                exit(1);
+            }
+            new_cap *= 2;
+        } while ((size_t)new_len >= new_cap);
+        if ((size_t)new_cap > (SIZE_MAX / sizeof(ExtraData))) {
+            fprintf(stderr, "AST extra_cap overflows word size!\n");
             exit(1);
         }
-        ast->extra_data = realloc(ast->node_datas, new_cap * 8);
+        ast->extra_data = realloc(ast->node_datas, (size_t)new_cap * sizeof(ExtraData));
+        if (ast->extra_data == NULL) {
+            fprintf(stderr, "AST extra_data couldn't allocate memory!\n");
+            exit(1);
+        }
         ast->extra_cap = new_cap;
     }
-    memcpy(&ast->extra_data[ast->extra_len], extra, len * 8);
     ExtraIndex pos = ast->extra_len;
+    memcpy(&ast->extra_data[pos], extra, len * 8);
     ast->extra_len = new_len;
     return pos;
 }
