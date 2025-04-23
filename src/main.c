@@ -16,8 +16,8 @@ int interp(const char* src, size_t len) {
 
     printf("\nDebug AST Output:\n");
     Parser par = parser_init(src, len, tkns, tkns_len);
-    uint32_t expr = parse_expr(&par, 0);
-    print_ast(src, &par.ast, expr, 0);
+    NodeIndex var_decl = parse_var_decl(&par);
+    print_ast(src, &par.ast, var_decl, 0);
     printf("\n");
 
     return 0;
