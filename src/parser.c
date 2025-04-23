@@ -73,10 +73,12 @@ static inline Token peek(Parser* par) {
 }
 
 static inline Token pop_token(Parser* par) {
-    // TODO prevent overrunning tkns
     Token out;
     do {
-        out = par->ast.tokens[++par->cur_token];
+        if ((par->cur_token + 1) < par->ast.tokens_len) {
+            par->cur_token++;
+        }
+        out = par->ast.tokens[par->cur_token];
         // ignore comments
     } while (!tkn_is_parsed(out) && !tkn_is_err(out));
     return out;
