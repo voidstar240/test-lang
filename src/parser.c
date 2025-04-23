@@ -343,6 +343,51 @@ NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
     return lhs;
 }
 
+NodeIndex parse_var_decl(Parser* par) {
+    if (!match_token(par, TKN_VAR)) {
+        return 0; // TODO handle error
+    }
+
+    const TokenIndex name_index = par->cur_token;
+    if (!match_token(par, TKN_IDENTIFIER)) {
+        return 0; // TODO handle error
+    }
+
+    if (!match_token(par, TKN_COLON)) {
+        return 0; // TODO handle error
+    }
+    
+    // TODO type expr options:
+    //   keyword    null  _  any
+    //   symbol     MyType
+    //   access     Namespace.Type
+    //   call       matrix<2, 3>()
+    NodeIndex type_expr = parse_symbol(par);
+    if (!type_expr) {
+        return 0; // TODO handle error
+    }
+
+    if (!match_token(par, TKN_EQUAL)) {
+        return 0; // TODO handle error
+    }
+
+    NodeIndex assign_expr = parse_expr(par, 0);
+    if (!assign_expr) {
+        return 0; // TODO handle error
+    }
+
+    if (!match_token(par, TKN_SEMICOLON)) {
+        return 0; // TODO handle error
+    }
+
+    NodeDataVarDecl data = {
+        .token = name_index,
+        .type_expr = type_expr,
+        .assign_expr = assign_expr,
+    };
+    return insert_node_ast(&par->ast, AST_VAR_DECL, *(NodeData*)&data);
+}
+
 NodeIndex parse_function_decl(Parser *par) {
     if (!match_token(par, TKN_FN)) {
         return 0; // TODO communicate error and sync
@@ -435,6 +480,28 @@ static void print_binary(
     printf("}\n");
 }
 
+static void print_var_decl(
+        const char* src,
+        AST* ast,
+        NodeIndex index,
+        uint32_t depth
+) {
+    printf("Var Decl {\n");
+    NodeDataVarDecl data = *(NodeDataVarDecl*)&ast->node_datas[index];
+    print_indent(depth + 1);
+    const char* name = &src[ast->tokens[data.token].start];
+    const uint32_t len = ast->tokens[data.token].len;
+    printf("name = %.*s\n", (int)len, name);
+    print_indent(depth + 1);
+    printf("type_expr = ");
+    print_ast(src, ast, data.type_expr, depth + 1);
+    print_indent(depth + 1);
+    printf("assign_expr = ");
+    print_ast(src, ast, data.assign_expr, depth + 1);
+    print_indent(depth);
+    printf("}\n");
+}
+
 void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth) {
     if (ast->nodes_len <= index) { return; }
 
@@ -473,6 +540,8 @@ void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth) {
             print_binary(src, ast, index, depth, "/"); return;
         case AST_BINARY_MOD:
             print_binary(src, ast, index, depth, "%"); return;
+        case AST_VAR_DECL:
+            print_var_decl(src, ast, index, depth); return;
         case AST__NULL: printf("NULL\n"); return;
         default: printf("UNIMPLEMENTED"); return;
     }

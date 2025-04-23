@@ -6,7 +6,6 @@
 #include <stdlib.h>
 
 #include "scanner.h"
-#include "str.h"
 
 typedef uint32_t TokenIndex;
 typedef uint32_t NodeIndex;
@@ -50,6 +49,13 @@ typedef struct {
     NodeIndex rhs;
     uint8_t _pad[4];
 } NodeDataBinary;
+
+typedef struct {
+    TokenIndex token;
+    NodeIndex type_expr;
+    NodeIndex assign_expr;
+    uint8_t _pad[4];
+} NodeDataVarDecl;
 
 typedef struct {
     TokenIndex token;
@@ -131,8 +137,9 @@ static inline Parser parser_init(
     };
 }
 
-uint32_t parse_expr(Parser* par, uint8_t r_bp);
-uint32_t parse_function_decl(Parser* par);
+NodeIndex parse_expr(Parser* par, uint8_t r_bp);
+NodeIndex parse_var_decl(Parser* par);
+NodeIndex parse_function_decl(Parser* par);
 
 void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth);
 #endif
