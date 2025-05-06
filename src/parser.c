@@ -429,6 +429,51 @@ NodeIndex parse_function_decl(Parser *par) {
     return insert_node_ast(&par->ast, AST_FUNCTION_DECL, *(NodeData*)&data);
 }
 
+NodeIndex parse_top_level_decls(Parser* par) {
+    // TODO implement better allocation stratagey
+    NodeIndex* decls = malloc(16 * sizeof(NodeIndex));
+    size_t decls_cap = 16;
+    size_t decls_len = 0;
+    while (true) {
+        if (peek(par).tag == TKN_EOF) {
+            break;
+        } else if (peek(par).tag == TKN_VAR) {
+            if (decls_len >= decls_cap) {
+                decls_cap *= 2;
+                decls = realloc(decls, decls_cap * sizeof(NodeIndex));
+            }
+            NodeIndex var_decl = parse_var_decl(par);
+            if (var_decl == 0) {
+                // TODO handle properly
+                fprintf(stderr, "Invalid varaible declaration.\n");
+                exit(1);
+            }
+            decls[decls_len] = var_decl;
+            decls_len++;
+        } else {
+            // TODO handle properly
+            fprintf(stderr, "Unrecognized token.\n");
+            exit(1);
+        }
+    }
+
+    if (decls_len % 2 == 1) {
+        decls[decls_len] = 0;
+    }
+    ExtraIndex extra_len = (decls_len / 2) + (decls_len & 0x1);
+    ExtraIndex extra = insert_extra_ast(&par->ast, (ExtraData*)decls,
+                                        extra_len);
+    const NodeDataTopLevel top_data = {
+        .token = par->cur_token,
+        .decls_start = extra,
+        .decls_count = decls_len,
+    };
+    const NodeIndex top_node = insert_node_ast(&par->ast, AST_TOP_LEVEL,
+                                               *(NodeData*)&top_data);
+    free(decls);
+    return top_node;
+}
+
 static inline void print_indent(size_t depth) {
     for (size_t i = 0; i < depth; i++) {
         printf("  ");
@@ -502,6 +547,25 @@ static void print_var_decl(
     printf("}\n");
 }
 
+static void print_top_level(
+        const char* src,
+        AST* ast,
+        NodeIndex index,
+        uint32_t depth
+) {
+    NodeDataTopLevel* const data = (NodeDataTopLevel*)&ast->node_datas[index];
+    printf("Top Level {\n");
+    for (uint32_t i = 0; i < data->decls_count; i++) {
+        NodeExtraTopLevel* const extra =
+            (NodeExtraTopLevel*)&ast->extra_data[data->decls_start + (i / 2)];
+        print_indent(depth + 1);
+        printf("%d: ", i);
+        print_var_decl(src, ast, extra->nodes[i % 2], depth + 1);
+    }
+    print_indent(depth);
+    printf("}\n");
+}
+
 void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth) {
     if (ast->nodes_len <= index) { return; }
 
@@ -542,6 +606,8 @@ void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth) {
             print_binary(src, ast, index, depth, "%"); return;
         case AST_VAR_DECL:
             print_var_decl(src, ast, index, depth); return;
+        case AST_TOP_LEVEL:
+            print_top_level(src, ast, index, depth); return;
         case AST__NULL: printf("NULL\n"); return;
         default: printf("UNIMPLEMENTED"); return;
     }
