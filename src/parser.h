@@ -73,6 +73,17 @@ typedef struct {
     uint32_t param_count;
 } NodeExtraFunctionPrototype;
 
+typedef struct {
+    TokenIndex token;
+    ExtraIndex decls_start;
+    ExtraIndex decls_count;
+    uint8_t _pad[4];
+} NodeDataTopLevel;
+
+typedef struct {
+    NodeIndex nodes[2];
+} NodeExtraTopLevel;
+
 typedef enum {
     AST__NULL,
 
@@ -103,6 +114,7 @@ typedef enum {
     AST_FUNCTION_DECL,
     AST_VAR_DECL,
     AST_RETURN,
+    AST_TOP_LEVEL,
 } NodeTag;
 
 
@@ -140,6 +152,7 @@ static inline Parser parser_init(
 NodeIndex parse_expr(Parser* par, uint8_t r_bp);
 NodeIndex parse_var_decl(Parser* par);
 NodeIndex parse_function_decl(Parser* par);
+NodeIndex parse_top_level_decls(Parser* par);
 
 void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth);
 #endif

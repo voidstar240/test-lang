@@ -14,10 +14,14 @@ int interp(const char* src, size_t len) {
     printf("\nDebug Token Output:\n");
     debug_print_tokens(src, tkns, tkns_len);
 
-    printf("\nDebug AST Output:\n");
     Parser par = parser_init(src, len, tkns, tkns_len);
-    NodeIndex var_decl = parse_var_decl(&par);
-    print_ast(src, &par.ast, var_decl, 0);
+    NodeIndex top_level = parse_top_level_decls(&par);
+    if (top_level == 0) {
+        printf("Invalid AST\n");
+        return 0;
+    }
+    printf("\nDebug AST Output:\n");
+    print_ast(src, &par.ast, top_level, 0);
     printf("\n");
 
     return 0;
