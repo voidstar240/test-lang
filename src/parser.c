@@ -230,8 +230,7 @@ static NodeIndex parse_number(Parser* par) {
     const Token num = peek(par);
     const TokenIndex tkn_index = par->cur_token;
     if (!match_token(par, TKN_NUMBER)) {
-        exit(1);
-        // TODO handle error
+        par->err = "Expected Number";
         return 0;
     }
     const NodeDataNumber data = {
@@ -244,8 +243,7 @@ static NodeIndex parse_number(Parser* par) {
 static NodeIndex parse_symbol(Parser* par) {
     const TokenIndex tkn_index = par->cur_token;
     if (!match_token(par, TKN_IDENTIFIER)) {
-        // TODO handle error
-        exit(1);
+        par->err = "Expected Identifier";
         return 0;
     }
     const NodeData data = {
@@ -258,8 +256,8 @@ static NodeIndex parse_expr_lhs(Parser* par, uint8_t r_bp) {
     const Token tkn = peek(par);
     const TokenIndex tkn_index = par->cur_token;
     if (tkn_is_err(tkn)) {
-        // TODO handle error
-        exit(1);
+        par->err = "Token error"; // TODO make more specific
+        return 0;
     }
     
     const PrefixOp op = prefix_op(tkn.tag);
@@ -281,29 +279,28 @@ static NodeIndex parse_expr_lhs(Parser* par, uint8_t r_bp) {
             pop_token(par);
             const NodeIndex lhs = parse_expr(par, 0);
             if (!match_token(par, TKN_R_PAREN)) {
-                // TODO handle error
-                exit(1);
+                par->err = "Expected Closing Parenthesis";
+                return 0;
             }
             return lhs;
         default:
-            // TODO handle error
-            exit(1);
+            par->err = "Expected Number, Identifier, Parenthesis or Operator";
+            return 0;
     }
 }
 
 NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
     NodeIndex lhs = parse_expr_lhs(par, r_bp);
     if (lhs == 0) {
-        // TODO handle error
-        exit(1);
+        return 0;
     }
     
     while (true) {
         const Token op_tkn = peek(par);
         const TokenIndex tkn_index = par->cur_token;
         if (tkn_is_err(op_tkn)) {
-            // TODO handle error
-            exit(1);
+            par->err = "Token error";
+            return 0;
         }
         const InfixOp op = infix_op(op_tkn.tag);
         if (!op) { break; }
@@ -345,16 +342,19 @@ NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
 
 NodeIndex parse_var_decl(Parser* par) {
     if (!match_token(par, TKN_VAR)) {
-        return 0; // TODO handle error
+        par->err = "Expected Var Keyword"; // TODO Does this need to be an error
+        return 0;
     }
 
     const TokenIndex name_index = par->cur_token;
     if (!match_token(par, TKN_IDENTIFIER)) {
-        return 0; // TODO handle error
+        par->err = "Expected Identifier";
+        return 0;
     }
 
     if (!match_token(par, TKN_COLON)) {
-        return 0; // TODO handle error
+        par->err = "Expected Colon";
+        return 0;
     }
     
     // TODO type expr options:
@@ -364,20 +364,26 @@ NodeIndex parse_var_decl(Parser* par) {
     //   call       matrix<2, 3>()
     NodeIndex type_expr = parse_symbol(par);
     if (!type_expr) {
-        return 0; // TODO handle error
+        par->err = "Expected Type Expression";
+        return 0;
     }
 
-    if (!match_token(par, TKN_EQUAL)) {
-        return 0; // TODO handle error
-    }
-
-    NodeIndex assign_expr = parse_expr(par, 0);
-    if (!assign_expr) {
-        return 0; // TODO handle error
+    NodeIndex assign_expr = 0;
+    if (match_token(par, TKN_EQUAL)) {
+        NodeIndex pre_nodes_len = par->ast.nodes_len;
+        NodeIndex pre_extra_len = par->ast.extra_len;
+        assign_expr = parse_expr(par, 0);
+        if (!assign_expr) {
+            par->err = "Expected Assignment Expression";
+            par->ast.nodes_len = pre_nodes_len;
+            par->ast.extra_len = pre_extra_len;
+            return 0;
+        }
     }
 
     if (!match_token(par, TKN_SEMICOLON)) {
-        return 0; // TODO handle error
+        par->err = "Expected Semicolon";
+        return 0;
     }
 
     NodeDataVarDecl data = {
@@ -430,30 +436,38 @@ NodeIndex parse_function_decl(Parser *par) {
 }
 
 NodeIndex parse_top_level_decls(Parser* par) {
-    // TODO implement better allocation stratagey
+    // TODO implement better allocation strategy
     NodeIndex* decls = malloc(16 * sizeof(NodeIndex));
     size_t decls_cap = 16;
     size_t decls_len = 0;
+    bool unwind = false;
     while (true) {
         if (peek(par).tag == TKN_EOF) {
+            unwind = false;
             break;
         } else if (peek(par).tag == TKN_VAR) {
+            unwind = false;
             if (decls_len >= decls_cap) {
                 decls_cap *= 2;
                 decls = realloc(decls, decls_cap * sizeof(NodeIndex));
             }
             NodeIndex var_decl = parse_var_decl(par);
             if (var_decl == 0) {
-                // TODO handle properly
-                fprintf(stderr, "Invalid varaible declaration.\n");
-                exit(1);
+                fprintf(stderr, "Invalid variable declaration:\n");
+                fprintf(stderr, "  %s\n", par->err);
+                unwind = true;
+                continue;
             }
             decls[decls_len] = var_decl;
             decls_len++;
         } else {
-            // TODO handle properly
+            if (unwind) {
+                pop_token(par);
+                continue;
+            }
             fprintf(stderr, "Unrecognized token.\n");
-            exit(1);
+            unwind = true;
+            continue;
         }
     }
 
@@ -542,7 +556,11 @@ static void print_var_decl(
     print_ast(src, ast, data.type_expr, depth + 1);
     print_indent(depth + 1);
     printf("assign_expr = ");
-    print_ast(src, ast, data.assign_expr, depth + 1);
+    if (data.assign_expr) {
+        print_ast(src, ast, data.assign_expr, depth + 1);
+    } else {
+        printf("NULL\n");
+    }
     print_indent(depth);
     printf("}\n");
 }
