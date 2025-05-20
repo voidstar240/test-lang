@@ -123,6 +123,7 @@ typedef struct {
     uint32_t src_len;
     TokenIndex cur_token;
     AST ast;
+    const char* err; // TODO error enum maybe?
 } Parser;
 
 static inline Parser parser_init(
@@ -146,6 +147,7 @@ static inline Parser parser_init(
             .extra_cap = 64,
             .extra_len = 1,
         },
+        .err = "",
     };
 }
 
