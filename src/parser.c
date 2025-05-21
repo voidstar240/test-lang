@@ -352,20 +352,18 @@ NodeIndex parse_var_decl(Parser* par) {
         return 0;
     }
 
-    if (!match_token(par, TKN_COLON)) {
-        par->err = "Expected Colon";
-        return 0;
-    }
-    
-    // TODO type expr options:
-    //   keyword    null  _  any
-    //   symbol     MyType
-    //   access     Namespace.Type
-    //   call       matrix<2, 3>()
-    NodeIndex type_expr = parse_symbol(par);
-    if (!type_expr) {
-        par->err = "Expected Type Expression";
-        return 0;
+    NodeIndex type_expr = 0;
+    if (match_token(par, TKN_COLON)) {
+        // TODO type expr options:
+        //   keyword    null  _  any
+        //   symbol     MyType
+        //   access     Namespace.Type
+        //   call       matrix<2, 3>()
+        NodeIndex type_expr = parse_symbol(par);
+        if (!type_expr) {
+            par->err = "Expected Type Expression";
+            return 0;
+        }
     }
 
     NodeIndex assign_expr = 0;
@@ -553,7 +551,11 @@ static void print_var_decl(
     printf("name = %.*s\n", (int)len, name);
     print_indent(depth + 1);
     printf("type_expr = ");
-    print_ast(src, ast, data.type_expr, depth + 1);
+    if (data.type_expr) {
+        print_ast(src, ast, data.type_expr, depth + 1);
+    } else {
+        printf("NULL\n");
+    }
     print_indent(depth + 1);
     printf("assign_expr = ");
     if (data.assign_expr) {
