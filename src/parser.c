@@ -359,7 +359,7 @@ NodeIndex parse_var_decl(Parser* par) {
         //   symbol     MyType
         //   access     Namespace.Type
         //   call       matrix<2, 3>()
-        NodeIndex type_expr = parse_symbol(par);
+        type_expr = parse_symbol(par);
         if (!type_expr) {
             par->err = "Expected Type Expression";
             return 0;
