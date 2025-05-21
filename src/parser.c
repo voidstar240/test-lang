@@ -394,30 +394,36 @@ NodeIndex parse_var_decl(Parser* par) {
 
 NodeIndex parse_function_decl(Parser *par) {
     if (!match_token(par, TKN_FN)) {
-        return 0; // TODO communicate error and sync
+        par->err = "Expected fn keyword"; // TODO should this be an error?
+        return 0;
     }
 
     const TokenIndex name_index = par->cur_token;
     if (!match_token(par, TKN_IDENTIFIER)) {
+        par->err = "Expected Identifier for fn name";
         return 0;
     }
 
     if (!match_token(par, TKN_L_PAREN)) {
+        par->err = "Expected Open Parenthesis";
         return 0;
     }
 
     // TODO parse parameter list
 
     if (!match_token(par, TKN_R_PAREN)) {
+        par->err = "Expected Closing Parenthesis";
         return 0;
     }
     if (!match_token(par, TKN_L_BRACE)) {
+        par->err = "Expected Block after fn declaration";
         return 0;
     }
 
     // TODO parse expressions
 
     if (!match_token(par, TKN_R_BRACE)) {
+        par->err = "Expected closing brace";
         return 0;
     }
 
@@ -457,6 +463,21 @@ NodeIndex parse_top_level_decls(Parser* par) {
                 continue;
             }
             decls[decls_len] = var_decl;
+            decls_len++;
+        } else if (peek(par).tag == TKN_FN) {
+            unwind = false;
+            if (decls_len >= decls_cap) {
+                decls_cap *= 2;
+                decls = realloc(decls, decls_cap * sizeof(NodeIndex));
+            }
+            NodeIndex fn_decl = parse_function_decl(par);
+            if (fn_decl == 0) {
+                fprintf(stderr, "Invalid function declaration:\n");
+                fprintf(stderr, "  %s\n", par->err);
+                unwind = true;
+                continue;
+            }
+            decls[decls_len] = fn_decl;
             decls_len++;
         } else {
             if (unwind) {
@@ -567,6 +588,24 @@ static void print_var_decl(
     printf("}\n");
 }
 
+static void print_fn_decl(
+        const char* src,
+        AST* ast,
+        NodeIndex index,
+        uint32_t depth
+) {
+    printf("Func Decl {\n");
+    NodeDataFunctionPrototype data =
+        *(NodeDataFunctionPrototype*)&ast->node_datas[index];
+    print_indent(depth + 1);
+    const char* name = &src[ast->tokens[data.token].start];
+    const uint32_t len = ast->tokens[data.token].len;
+    printf("name = %.*s\n", (int)len, name);
+    // TODO print params and block stmts
+    print_indent(depth);
+    printf("}\n");
+}
+
 static void print_top_level(
         const char* src,
         AST* ast,
@@ -580,7 +619,15 @@ static void print_top_level(
             (NodeExtraTopLevel*)&ast->extra_data[data->decls_start + (i / 2)];
         print_indent(depth + 1);
         printf("%d: ", i);
-        print_var_decl(src, ast, extra->nodes[i % 2], depth + 1);
+        const NodeIndex decl = extra->nodes[i % 2];
+        switch (ast->node_tags[decl]) {
+            case AST_VAR_DECL:
+                print_var_decl(src, ast, decl, depth + 1);
+                break;
+            case AST_FUNCTION_DECL:
+                print_fn_decl(src, ast, decl, depth + 1);
+                break;
+        }
     }
     print_indent(depth);
     printf("}\n");
