@@ -59,19 +59,20 @@ typedef struct {
 
 typedef struct {
     TokenIndex token;
-    ExtraIndex extra;
-    uint8_t _pad[8]; // TODO could store param count here
-} NodeDataFunctionPrototype;
-
-typedef struct {
-    uint32_t name_id;
-    NodeIndex expr;
-} FunctionPrototypeParam;
-
-typedef struct {
+    ExtraIndex params_start;
+    ExtraIndex params_count;
     uint8_t _pad[4];
-    uint32_t param_count;
-} NodeExtraFunctionPrototype;
+} NodeDataFnProto;
+
+typedef struct {
+    NodeIndex params[2];
+} NodeExtraFnProto;
+
+typedef struct {
+    TokenIndex token;
+    NodeIndex type_expr;
+    uint8_t _pad[8];
+} NodeDataFnParam;
 
 typedef struct {
     TokenIndex token;
@@ -112,6 +113,7 @@ typedef enum {
     AST_ACCESS,
 
     AST_FUNCTION_DECL,
+    AST_FN_PARAM,
     AST_VAR_DECL,
     AST_RETURN,
     AST_TOP_LEVEL,
