@@ -302,6 +302,24 @@ NodeIndex parse_access(Parser* par, NodeIndex lhs) {
     return insert_node_ast(&par->ast, AST_ACCESS, *(NodeData*)&data);
 }
 
+NodeIndex parse_index(Parser* par, NodeIndex lhs, TokenIndex op) {
+    NodeIndex index_expr = parse_expr(par, 0);
+    if (index_expr == 0) {
+        par->err = "Invalid index expression";
+        return 0;
+    }
+    if (!match_token(par, TKN_R_BRACKET)) {
+        par->err = "No closing bracket for index operator";
+        return 0;
+    }
+    NodeDataIndex data = {
+        .token = op,
+        .item_expr = lhs,
+        .index_expr = index_expr,
+    };
+    return insert_node_ast(&par->ast, AST_INDEX, *(NodeData*)&data);
+}
+
 NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
     NodeIndex lhs = parse_expr_lhs(par, r_bp);
     if (lhs == 0) {
@@ -333,7 +351,8 @@ NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
                 // TODO parse call
                 break;
             case INOP_INDEX:
-                // TODO parse index
+                lhs = parse_index(par, lhs, tkn_index);
+                if (lhs == 0) { return 0; }
                 break;
             case INOP_ACCESS:
                 lhs = parse_access(par, lhs);
@@ -647,6 +666,24 @@ static void print_binary(
     printf("}\n");
 }
 
+static void print_index(
+    const char* src,
+    AST* ast,
+    NodeIndex index,
+    uint32_t depth
+) {
+    printf("Index {\n");
+    NodeDataIndex* data = (NodeDataIndex*)&ast->node_datas[index];
+    print_indent(depth + 1);
+    printf("item_expr = ");
+    print_ast(src, ast, data->item_expr, depth + 1);
+    print_indent(depth + 1);
+    printf("index_expr = ");
+    print_ast(src, ast, data->index_expr, depth + 1);
+    print_indent(depth);
+    printf("}\n");
+}
+
 static void print_access(
     const char* src,
     AST* ast,
@@ -809,6 +846,8 @@ void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth) {
             print_binary(src, ast, index, depth, "/"); return;
         case AST_BINARY_MOD:
             print_binary(src, ast, index, depth, "%"); return;
+        case AST_INDEX:
+            print_index(src, ast, index, depth); return;
         case AST_ACCESS:
             print_access(src, ast, index, depth); return;
         case AST_VAR_DECL:
