@@ -289,6 +289,19 @@ static NodeIndex parse_expr_lhs(Parser* par, uint8_t r_bp) {
     }
 }
 
+NodeIndex parse_access(Parser* par, NodeIndex lhs) {
+    const TokenIndex child_tkn =  par->cur_token;
+    if (!match_token(par, TKN_IDENTIFIER)) {
+        par->err = "Expected Identifier after access operator";
+        return 0;
+    }
+    NodeDataAccess data = {
+        .child_tkn = child_tkn,
+        .parent_expr = lhs,
+    };
+    return insert_node_ast(&par->ast, AST_ACCESS, *(NodeData*)&data);
+}
+
 NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
     NodeIndex lhs = parse_expr_lhs(par, r_bp);
     if (lhs == 0) {
@@ -323,10 +336,14 @@ NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
                 // TODO parse index
                 break;
             case INOP_ACCESS:
-                // TODO parse access
+                lhs = parse_access(par, lhs);
+                if (lhs == 0) { return 0; }
                 break;
             default:;
                 const NodeIndex rhs = parse_expr(par, bind_pow(op));
+                if (rhs == 0) {
+                    return 0;
+                }
                 const NodeDataBinary data = {
                     .token = tkn_index,
                     .lhs = lhs,
@@ -630,6 +647,25 @@ static void print_binary(
     printf("}\n");
 }
 
+static void print_access(
+    const char* src,
+    AST* ast,
+    NodeIndex index,
+    uint32_t depth
+) {
+    printf("Access {\n");
+    NodeDataAccess* data = (NodeDataAccess*)&ast->node_datas[index];
+    print_indent(depth + 1);
+    printf("parent_expr = ");
+    print_ast(src, ast, data->parent_expr, depth + 1);
+    print_indent(depth + 1);
+    const char* child_str = &src[ast->tokens[data->child_tkn].start];
+    const uint32_t len = ast->tokens[data->child_tkn].len;
+    printf("child = %.*s\n", len, child_str);
+    print_indent(depth);
+    printf("}\n");
+}
+
 static void print_var_decl(
         const char* src,
         AST* ast,
@@ -773,6 +809,8 @@ void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth) {
             print_binary(src, ast, index, depth, "/"); return;
         case AST_BINARY_MOD:
             print_binary(src, ast, index, depth, "%"); return;
+        case AST_ACCESS:
+            print_access(src, ast, index, depth); return;
         case AST_VAR_DECL:
             print_var_decl(src, ast, index, depth); return;
         case AST_TOP_LEVEL:
