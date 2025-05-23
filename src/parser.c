@@ -259,7 +259,7 @@ static NodeIndex parse_expr_lhs(Parser* par, uint8_t r_bp) {
         par->err = "Token error"; // TODO make more specific
         return 0;
     }
-    
+
     const PrefixOp op = prefix_op(tkn.tag);
     if (op) {
         pop_token(par);
@@ -294,7 +294,7 @@ NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
     if (lhs == 0) {
         return 0;
     }
-    
+
     while (true) {
         const Token op_tkn = peek(par);
         const TokenIndex tkn_index = par->cur_token;
@@ -304,7 +304,7 @@ NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
         }
         const InfixOp op = infix_op(op_tkn.tag);
         if (!op) { break; }
-        
+
         const uint8_t l_bp = bind_pow(op);
         const bool l_assoc = left_assoc(op);
         if (l_assoc) {
@@ -312,7 +312,7 @@ NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
         } else {
             if (l_bp < r_bp) { break; }
         }
-        
+
         pop_token(par);
         // handle special inops
         switch (op) {
@@ -409,14 +409,73 @@ NodeIndex parse_function_decl(Parser *par) {
         return 0;
     }
 
-    // TODO parse parameter list
+    // parse parameter
+    NodeIndex* params = malloc(16 * sizeof(NodeIndex));
+    size_t params_cap = 16;
+    size_t params_len = 0;
+    NodeIndex pre_nodes_len;
+    NodeIndex pre_extra_len;
+    while (true) {
+        pre_nodes_len = par->ast.nodes_len;
+        pre_extra_len = par->ast.extra_len;
+        if (match_token(par, TKN_R_PAREN)) {
+            break;
+        }
 
-    if (!match_token(par, TKN_R_PAREN)) {
-        par->err = "Expected Closing Parenthesis";
-        return 0;
+        TokenIndex param_name = par->cur_token;
+        if (!match_token(par, TKN_IDENTIFIER)) {
+            par->err = "Expected Identifier for fn param name or closing paren";
+            par->ast.nodes_len = pre_nodes_len;
+            par->ast.extra_len = pre_extra_len;
+            free(params);
+            return 0;
+        }
+
+        if (!match_token(par, TKN_COLON)) {
+            par->err = "Expected Colon after param name";
+            par->ast.nodes_len = pre_nodes_len;
+            par->ast.extra_len = pre_extra_len;
+            free(params);
+            return 0;
+        }
+
+        // TODO parse type expression instead of identifier
+        NodeIndex type_symbol = parse_symbol(par);
+        if (type_symbol == 0) {
+            par->err = "Expected Symbol for parameter type";
+            par->ast.nodes_len = pre_nodes_len;
+            par->ast.extra_len = pre_extra_len;
+            free(params);
+            return 0;
+        }
+
+        if (!match_token(par, TKN_COMMA)) {
+            if (peek(par).tag != TKN_R_PAREN) {
+                par->err = "Expected comma or closing parenthesis";
+                par->ast.nodes_len = pre_nodes_len;
+                par->ast.extra_len = pre_extra_len;
+                free(params);
+                return 0;
+            }
+        }
+        if (params_len >= params_cap) {
+            params_cap *= 2;
+            params = realloc(params, params_cap * sizeof(NodeIndex));
+        }
+        NodeDataFnParam data = {
+            .token = param_name,
+            .type_expr = type_symbol,
+        };
+        params[params_len] =
+            insert_node_ast(&par->ast, AST_FN_PARAM, *(NodeData*)&data);
+        params_len++;
     }
+
     if (!match_token(par, TKN_L_BRACE)) {
         par->err = "Expected Block after fn declaration";
+        par->ast.nodes_len = pre_nodes_len;
+        par->ast.extra_len = pre_extra_len;
+        free(params);
         return 0;
     }
 
@@ -424,20 +483,33 @@ NodeIndex parse_function_decl(Parser *par) {
 
     if (!match_token(par, TKN_R_BRACE)) {
         par->err = "Expected closing brace";
+        par->ast.nodes_len = pre_nodes_len;
+        par->ast.extra_len = pre_extra_len;
+        free(params);
         return 0;
     }
 
-    const NodeExtraFunctionPrototype extra = {
-        .param_count = 0,
-    };
-    ExtraIndex extra_id = insert_extra_ast(&par->ast, (uint8_t(*)[8])&extra, 1);
-
-    const NodeDataFunctionPrototype data =  {
+    if (params_len % 2 == 1) {
+        params[params_len] = 0;
+    }
+    ExtraIndex extra_len = (params_len / 2) + (params_len & 0x1);
+    ExtraIndex params_start = insert_extra_ast(&par->ast, (ExtraData*)params,
+                                               extra_len);
+    free(params);
+    const NodeDataFnProto data =  {
         .token = name_index,
-        .extra = extra_id,
+        .params_start = params_start,
+        .params_count = params_len,
     };
     return insert_node_ast(&par->ast, AST_FUNCTION_DECL, *(NodeData*)&data);
 }
+
+// TODO better panic mode error handling
+// Stragety: Create a stack on parser containing all tokens that could be used
+// to terminate an unwind. When unwinding check the tokens on the stack. When a
+// token is encounted that is in the stack, stop the unwind, and return to the
+// function that pushed that token to the stack popping all higher tokens off
+// the stack.
 
 NodeIndex parse_top_level_decls(Parser* par) {
     // TODO implement better allocation strategy
@@ -588,6 +660,25 @@ static void print_var_decl(
     printf("}\n");
 }
 
+static void print_fn_param(
+    const char* src,
+    AST* ast,
+    NodeIndex index,
+    uint32_t depth
+) {
+    NodeDataFnParam* const data = (NodeDataFnParam*)&ast->node_datas[index];
+    printf("Func Param {\n");
+    print_indent(depth + 1);
+    const char* name = &src[ast->tokens[data->token].start];
+    const uint32_t len = ast->tokens[data->token].len;
+    printf("name = %.*s\n", (int)len, name);
+    print_indent(depth + 1);
+    printf("type_expr = ");
+    print_ast(src, ast, data->type_expr, depth);
+    print_indent(depth);
+    printf("}\n");
+}
+
 static void print_fn_decl(
         const char* src,
         AST* ast,
@@ -595,13 +686,24 @@ static void print_fn_decl(
         uint32_t depth
 ) {
     printf("Func Decl {\n");
-    NodeDataFunctionPrototype data =
-        *(NodeDataFunctionPrototype*)&ast->node_datas[index];
+    NodeDataFnProto* const data = (NodeDataFnProto*)&ast->node_datas[index];
     print_indent(depth + 1);
-    const char* name = &src[ast->tokens[data.token].start];
-    const uint32_t len = ast->tokens[data.token].len;
+    const char* name = &src[ast->tokens[data->token].start];
+    const uint32_t len = ast->tokens[data->token].len;
     printf("name = %.*s\n", (int)len, name);
-    // TODO print params and block stmts
+    for (uint32_t i = 0; i < data->params_count; i++) {
+        NodeExtraFnProto* const extra =
+            (NodeExtraFnProto*)&ast->extra_data[data->params_start + (i / 2)];
+        print_indent(depth + 1);
+        printf("%d: ", i);
+        const NodeIndex param = extra->params[i % 2];
+        if (ast->node_tags[param] == AST_FN_PARAM) {
+            print_fn_param(src, ast, param, depth + 1);
+        } else {
+            printf("INVALID PARAM TYPE!\n");
+        }
+    }
+    // TODO print block stmts
     print_indent(depth);
     printf("}\n");
 }
