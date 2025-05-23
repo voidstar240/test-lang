@@ -51,6 +51,13 @@ typedef struct {
 } NodeDataBinary;
 
 typedef struct {
+    TokenIndex token;
+    NodeIndex item_expr;
+    NodeIndex index_expr;
+    uint8_t _pad[4];
+} NodeDataIndex;
+
+typedef struct {
     TokenIndex child_tkn;
     NodeIndex parent_expr;
     uint8_t _pad[8];
