@@ -85,7 +85,7 @@ typedef struct {
     TokenIndex token;
     ExtraIndex params_start;
     ExtraIndex params_count;
-    uint8_t _pad[4];
+    NodeIndex block; // TODO this probably shouldn't be in the prototype
 } NodeDataFnProto;
 
 typedef struct {
@@ -97,6 +97,16 @@ typedef struct {
     NodeIndex type_expr;
     uint8_t _pad[8];
 } NodeDataFnParam;
+
+typedef struct {
+    TokenIndex token;
+    ExtraIndex stmts_start;
+    ExtraIndex stmts_count;
+} NodeDataBlock;
+
+typedef struct {
+    NodeIndex stmts[2];
+} NodeExtraBlock;
 
 typedef struct {
     TokenIndex token;
@@ -141,6 +151,7 @@ typedef enum {
     AST_VAR_DECL,
     AST_RETURN,
     AST_TOP_LEVEL,
+    AST_BLOCK,
 } NodeTag;
 
 
