@@ -473,6 +473,64 @@ NodeIndex parse_var_decl(Parser* par) {
     return insert_node_ast(&par->ast, AST_VAR_DECL, *(NodeData*)&data);
 }
 
+NodeIndex parse_block(Parser* par) {
+    if (!match_token(par, TKN_L_BRACE)) {
+        par->err = "Expected opening brace for block";
+        return 0;
+    }
+    NodeIndex* stmts = malloc(16 * sizeof(NodeIndex));
+    NodeIndex stmts_cap = 16;
+    NodeIndex stmts_len = 0;
+    // TODO implement unwinding
+    while (true) {
+        if (match_token(par, TKN_R_BRACE)) {
+            break;
+        }
+        if (stmts_len >= stmts_cap) {
+            stmts_cap *= 2;
+            stmts = realloc(stmts, stmts_cap * sizeof(NodeIndex));
+        }
+
+        if (peek(par).tag == TKN_VAR) {
+            NodeIndex var_decl = parse_var_decl(par);
+            if (var_decl == 0) {
+                par->err = "Invalid var decl in block";
+                return 0;
+            }
+            stmts[stmts_len] = var_decl;
+            stmts_len++;
+        } else {
+            NodeIndex expr = parse_expr(par, 0);
+            if (expr == 0) {
+                par->err = "Unrecognized token or expression in block";
+                return 0;
+            }
+            if (!match_token(par, TKN_SEMICOLON)) {
+                par->err = "Expected semicolon after block expression";
+                return 0;
+            }
+            stmts[stmts_len] = expr;
+            stmts_len++;
+        }
+    }
+
+    if (stmts_len % 2 == 1) {
+        stmts[stmts_len] = 0;
+    }
+    ExtraIndex extra_len = (stmts_len / 2) + (stmts_len & 0x1);
+    ExtraIndex extra = insert_extra_ast(&par->ast, (ExtraData*)stmts,
+                                        extra_len);
+    const NodeDataBlock data = {
+        .token = par->cur_token,
+        .stmts_start = extra,
+        .stmts_count = stmts_len,
+    };
+    const NodeIndex block = insert_node_ast(&par->ast, AST_BLOCK,
+                                               *(NodeData*)&data);
+    free(stmts);
+    return block;
+}
+
 NodeIndex parse_function_decl(Parser *par) {
     if (!match_token(par, TKN_FN)) {
         par->err = "Expected fn keyword"; // TODO should this be an error?
@@ -552,18 +610,8 @@ NodeIndex parse_function_decl(Parser *par) {
         params_len++;
     }
 
-    if (!match_token(par, TKN_L_BRACE)) {
-        par->err = "Expected Block after fn declaration";
-        par->ast.nodes_len = pre_nodes_len;
-        par->ast.extra_len = pre_extra_len;
-        free(params);
-        return 0;
-    }
-
-    // TODO parse expressions
-
-    if (!match_token(par, TKN_R_BRACE)) {
-        par->err = "Expected closing brace";
+    NodeIndex block = parse_block(par);
+    if (block == 0) {
         par->ast.nodes_len = pre_nodes_len;
         par->ast.extra_len = pre_extra_len;
         free(params);
@@ -581,6 +629,7 @@ NodeIndex parse_function_decl(Parser *par) {
         .token = name_index,
         .params_start = params_start,
         .params_count = params_len,
+        .block = block,
     };
     return insert_node_ast(&par->ast, AST_FUNCTION_DECL, *(NodeData*)&data);
 }
@@ -836,7 +885,7 @@ static void print_fn_decl(
         NodeExtraFnProto* const extra =
             (NodeExtraFnProto*)&ast->extra_data[data->params_start + (i / 2)];
         print_indent(depth + 1);
-        printf("%d: ", i);
+        printf("Param %d: ", i);
         const NodeIndex param = extra->params[i % 2];
         if (ast->node_tags[param] == AST_FN_PARAM) {
             print_fn_param(src, ast, param, depth + 1);
@@ -844,7 +893,29 @@ static void print_fn_decl(
             printf("INVALID PARAM TYPE!\n");
         }
     }
-    // TODO print block stmts
+    print_indent(depth + 1);
+    printf("block = ");
+    print_ast(src, ast, data->block, depth + 1);
+    print_indent(depth);
+    printf("}\n");
+}
+
+static void print_block(
+    const char* src,
+    AST* ast,
+    NodeIndex index,
+    uint32_t depth
+) {
+    NodeDataBlock* const data = (NodeDataBlock*)&ast->node_datas[index];
+    printf("Block {\n");
+    for (uint32_t i = 0; i < data->stmts_count; i++) {
+        NodeExtraBlock* const extra =
+            (NodeExtraBlock*)&ast->extra_data[data->stmts_start + (i / 2)];
+        print_indent(depth + 1);
+        printf("Stmt %d: ", i);
+        const NodeIndex stmt = extra->stmts[i % 2];
+        print_ast(src, ast, stmt, depth + 1);
+    }
     print_indent(depth);
     printf("}\n");
 }
@@ -924,6 +995,8 @@ void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth) {
             print_var_decl(src, ast, index, depth); return;
         case AST_TOP_LEVEL:
             print_top_level(src, ast, index, depth); return;
+        case AST_BLOCK:
+            print_block(src, ast, index, depth); return;
         case AST__NULL: printf("NULL\n"); return;
         default: printf("UNIMPLEMENTED"); return;
     }
