@@ -53,6 +53,17 @@ typedef struct {
 typedef struct {
     TokenIndex token;
     NodeIndex item_expr;
+    ExtraIndex args_start;
+    ExtraIndex args_count;
+} NodeDataCall;
+
+typedef struct {
+    NodeIndex args[2];
+} NodeExtraCall;
+
+typedef struct {
+    TokenIndex token;
+    NodeIndex item_expr;
     NodeIndex index_expr;
     uint8_t _pad[4];
 } NodeDataIndex;

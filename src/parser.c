@@ -289,17 +289,48 @@ static NodeIndex parse_expr_lhs(Parser* par, uint8_t r_bp) {
     }
 }
 
-NodeIndex parse_access(Parser* par, NodeIndex lhs) {
-    const TokenIndex child_tkn =  par->cur_token;
-    if (!match_token(par, TKN_IDENTIFIER)) {
-        par->err = "Expected Identifier after access operator";
-        return 0;
+NodeIndex parse_call(Parser* par, NodeIndex lhs, TokenIndex op) {
+    NodeIndex* args = malloc(16 * sizeof(NodeIndex));
+    NodeIndex args_cap = 16;
+    NodeIndex args_len = 0;
+    while (true) {
+        if (match_token(par, TKN_R_PAREN)) {
+            break;
+        }
+        NodeIndex arg_expr = parse_expr(par, 0);
+        if (arg_expr == 0) {
+            par->err = "Invalid argument expression";
+            return 0;
+        }
+        if (args_len >= args_cap) {
+            args_cap *= 2;
+            args = realloc(args, args_cap * sizeof(NodeIndex));
+        }
+        args[args_len] = arg_expr;
+        args_len++;
+        if (!match_token(par, TKN_COMMA)) {
+            if (peek(par).tag != TKN_R_PAREN) {
+                par->err = "Expected closing paren on function call";
+                free(args);
+                return 0;
+            }
+        }
     }
-    NodeDataAccess data = {
-        .child_tkn = child_tkn,
-        .parent_expr = lhs,
+
+    if (args_len % 2 == 1) {
+        args[args_len] = 0;
+    }
+    ExtraIndex extra_len = (args_len / 2) + (args_len & 0x1);
+    ExtraIndex args_start = insert_extra_ast(&par->ast, (ExtraData*)args,
+                                             extra_len);
+    free(args);
+    const NodeDataCall data = {
+        .token = op,
+        .item_expr = lhs,
+        .args_start = args_start,
+        .args_count = args_len,
     };
-    return insert_node_ast(&par->ast, AST_ACCESS, *(NodeData*)&data);
+    return insert_node_ast(&par->ast, AST_CALL, *(NodeData*)&data);
 }
 
 NodeIndex parse_index(Parser* par, NodeIndex lhs, TokenIndex op) {
@@ -318,6 +349,19 @@ NodeIndex parse_index(Parser* par, NodeIndex lhs, TokenIndex op) {
         .index_expr = index_expr,
     };
     return insert_node_ast(&par->ast, AST_INDEX, *(NodeData*)&data);
+}
+
+NodeIndex parse_access(Parser* par, NodeIndex lhs) {
+    const TokenIndex child_tkn =  par->cur_token;
+    if (!match_token(par, TKN_IDENTIFIER)) {
+        par->err = "Expected Identifier after access operator";
+        return 0;
+    }
+    NodeDataAccess data = {
+        .child_tkn = child_tkn,
+        .parent_expr = lhs,
+    };
+    return insert_node_ast(&par->ast, AST_ACCESS, *(NodeData*)&data);
 }
 
 NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
@@ -348,7 +392,8 @@ NodeIndex parse_expr(Parser* par, uint8_t r_bp) {
         // handle special inops
         switch (op) {
             case INOP_CALL:
-                // TODO parse call
+                lhs = parse_call(par, lhs, tkn_index);
+                if (lhs == 0) { return 0; }
                 break;
             case INOP_INDEX:
                 lhs = parse_index(par, lhs, tkn_index);
@@ -666,6 +711,29 @@ static void print_binary(
     printf("}\n");
 }
 
+static void print_call(
+    const char* src,
+    AST* ast,
+    NodeIndex index,
+    uint32_t depth
+) {
+    printf("Call {\n");
+    NodeDataCall* data = (NodeDataCall*)&ast->node_datas[index];
+    print_indent(depth + 1);
+    printf("item_expr = ");
+    print_ast(src, ast, data->item_expr, depth + 1);
+    for (uint32_t i = 0; i < data->args_count; i++) {
+        NodeExtraFnProto* const extra =
+            (NodeExtraFnProto*)&ast->extra_data[data->args_start + (i / 2)];
+        print_indent(depth + 1);
+        printf("Arg %d: ", i);
+        const NodeIndex param = extra->params[i % 2];
+        print_ast(src, ast, param, depth + 1);
+    }
+    print_indent(depth);
+    printf("}\n");
+}
+
 static void print_index(
     const char* src,
     AST* ast,
@@ -846,6 +914,8 @@ void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth) {
             print_binary(src, ast, index, depth, "/"); return;
         case AST_BINARY_MOD:
             print_binary(src, ast, index, depth, "%"); return;
+        case AST_CALL:
+            print_call(src, ast, index, depth); return;
         case AST_INDEX:
             print_index(src, ast, index, depth); return;
         case AST_ACCESS:
