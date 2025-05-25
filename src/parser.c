@@ -491,6 +491,46 @@ NodeIndex parse_return(Parser* par) {
     return insert_node_ast(&par->ast, AST_RETURN, *(NodeData*)&data);
 }
 
+NodeIndex parse_block(Parser* par);
+
+NodeIndex parse_if_else(Parser* par) {
+    TokenIndex token = par->cur_token;
+    if (!match_token(par, TKN_IF)) {
+        par->err = "Expected if keyword";
+        return 0;
+    }
+    if (!match_token(par, TKN_L_PAREN)) {
+        par->err = "Expected Opening Parenthesis on if";
+        return 0;
+    }
+    NodeIndex if_expr = parse_expr(par, 0);
+    if (if_expr == 0) {
+        return 0;
+    }
+    if (!match_token(par, TKN_R_PAREN)) {
+        par->err = "Expected Closing parenthesis on if";
+        return 0;
+    }
+    NodeIndex then_block = parse_block(par);
+    if (then_block == 0) {
+        return 0;
+    }
+    NodeIndex else_block = 0;
+    if (match_token(par, TKN_ELSE)) {
+        else_block = parse_block(par);
+        if (else_block == 0) {
+            return 0;
+        }
+    }
+    NodeDataIfElse data = {
+        .token = token,
+        .if_expr = if_expr,
+        .then_block = then_block,
+        .else_block = else_block,
+    };
+    return insert_node_ast(&par->ast, AST_IF_ELSE, *(NodeData*)&data);
+}
+
 NodeIndex parse_block(Parser* par) {
     if (!match_token(par, TKN_L_BRACE)) {
         par->err = "Expected opening brace for block";
@@ -524,6 +564,14 @@ NodeIndex parse_block(Parser* par) {
                 return 0;
             }
             stmts[stmts_len] = ret_stmt;
+            stmts_len++;
+        } else if (peek(par).tag == TKN_IF) {
+            NodeIndex if_stmt = parse_if_else(par);
+            if (if_stmt == 0) {
+                par->err = "Invalid if statement in block";
+                return 0;
+            }
+            stmts[stmts_len] = if_stmt;
             stmts_len++;
         } else {
             NodeIndex expr = parse_expr(par, 0);
@@ -970,6 +1018,27 @@ static void print_return(
     printf("}\n");
 }
 
+static void print_if_else(
+    const char* src,
+    AST* ast,
+    NodeIndex index,
+    uint32_t depth
+) {
+    NodeDataIfElse* const data = (NodeDataIfElse*)&ast->node_datas[index];
+    printf("IfElse {\n");
+    print_indent(depth + 1);
+    printf("if_expr = ");
+    print_ast(src, ast, data->if_expr, depth + 1);
+    print_indent(depth + 1);
+    printf("then_block = ");
+    print_ast(src, ast, data->then_block, depth + 1);
+    print_indent(depth + 1);
+    printf("else_block = ");
+    print_ast(src, ast, data->else_block, depth + 1);
+    print_indent(depth);
+    printf("}\n");
+}
+
 static void print_top_level(
         const char* src,
         AST* ast,
@@ -1049,6 +1118,8 @@ void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth) {
             print_block(src, ast, index, depth); return;
         case AST_RETURN:
             print_return(src, ast, index, depth); return;
+        case AST_IF_ELSE:
+            print_if_else(src, ast, index, depth); return;
         case AST__NULL: printf("NULL\n"); return;
         default: printf("UNIMPLEMENTED"); return;
     }
