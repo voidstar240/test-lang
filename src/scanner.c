@@ -9,7 +9,9 @@ typedef struct {
 } KeywordStringPair;
 
 const KeywordStringPair pairs[] = {
+    { TKN_BREAK, "break" },
     { TKN_CONST, "const" },
+    { TKN_CONTINUE, "continue" },
     { TKN_ELSE, "else" },
     { TKN_FALSE, "false" },
     { TKN_FN, "fn" },
