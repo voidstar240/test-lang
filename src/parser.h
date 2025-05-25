@@ -123,6 +123,13 @@ typedef struct {
 
 typedef struct {
     TokenIndex token;
+    NodeIndex expr;
+    NodeIndex block;
+    uint8_t _pad[4];
+} NodeDataWhile;
+
+typedef struct {
+    TokenIndex token;
     ExtraIndex decls_start;
     ExtraIndex decls_count;
     uint8_t _pad[4];
@@ -166,6 +173,9 @@ typedef enum {
     AST_TOP_LEVEL,
     AST_BLOCK,
     AST_IF_ELSE,
+    AST_WHILE,
+    AST_BREAK,
+    AST_CONTINUE,
 } NodeTag;
 
 

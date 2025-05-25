@@ -32,12 +32,12 @@ typedef enum {
     TKN_PIPE,            TKN_PIPE_EQUAL, TKN_PIPE_PIPE,
 
     // LITERALS
-    TKN_CHAR, TKN_STRING, TKN_NUMBER, TKN_IDENTIFIER, 
+    TKN_CHAR, TKN_STRING, TKN_NUMBER, TKN_IDENTIFIER,
 
     // KEYWORDS
-    TKN_CONST, TKN_ELSE, TKN_FALSE,  TKN_FN,   TKN_FOR,   TKN_IF,  TKN_NONE,
-    TKN_ONES,  TKN_OR,   TKN_RETURN, TKN_TRUE, TKN_UNDEF, TKN_VAR, TKN_WHILE,
-    TKN_ZEROS,
+    TKN_BREAK, TKN_CONST, TKN_CONTINUE, TKN_ELSE,  TKN_FALSE,  TKN_FN,
+    TKN_FOR,   TKN_IF,    TKN_NONE,     TKN_ONES,  TKN_OR,     TKN_RETURN,
+    TKN_TRUE,  TKN_UNDEF, TKN_VAR,      TKN_WHILE, TKN_ZEROS,
 
     // NON-PARSED
     TKN_COMMENT_INLINE = 0x80,
@@ -140,7 +140,9 @@ static inline const char* tkn_tag_name(TokenTag tag) {
         case TKN_STRING: return "string";
         case TKN_NUMBER: return "number";
         case TKN_IDENTIFIER: return "identifier";
+        case TKN_BREAK: return "break";
         case TKN_CONST: return "const";
+        case TKN_CONTINUE: return "continue";
         case TKN_ELSE: return "else";
         case TKN_FALSE: return "false";
         case TKN_FN: return "fn";

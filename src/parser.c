@@ -531,6 +531,70 @@ NodeIndex parse_if_else(Parser* par) {
     return insert_node_ast(&par->ast, AST_IF_ELSE, *(NodeData*)&data);
 }
 
+NodeIndex parse_while(Parser* par) {
+    TokenIndex token = par->cur_token;
+    if (!match_token(par, TKN_WHILE)) {
+        par->err = "Expected while keyword";
+        return 0;
+    }
+    if (!match_token(par, TKN_L_PAREN)) {
+        par->err = "Expected opening parenthesis for while statement";
+        return 0;
+    }
+    NodeIndex expr = parse_expr(par, 0);
+    if (expr == 0) {
+        par->err = "Expected expression for while statement";
+        return 0;
+    }
+    if (!match_token(par, TKN_R_PAREN)) {
+        par->err = "Expected closing parenthesis for while statement";
+        return 0;
+    }
+    NodeIndex block = parse_block(par);
+    if (block == 0) {
+        par->err = "Invalid block for while statement";
+        return 0;
+    }
+    NodeDataWhile data = {
+        .token = token,
+        .expr = expr,
+        .block = block,
+    };
+    return insert_node_ast(&par->ast, AST_WHILE, *(NodeData*)&data);
+}
+
+NodeIndex parse_break(Parser* par) {
+    TokenIndex token = par->cur_token;
+    if (!match_token(par, TKN_BREAK)) {
+        par->err = "Expected break keyword";
+        return 0;
+    }
+    if (!match_token(par, TKN_SEMICOLON)) {
+        par->err = "Expected semicolon after break";
+        return 0;
+    }
+    NodeData data = {
+        .token = token,
+    };
+    return insert_node_ast(&par->ast, AST_BREAK, data);
+}
+
+NodeIndex parse_continue(Parser* par) {
+    TokenIndex token = par->cur_token;
+    if (!match_token(par, TKN_CONTINUE)) {
+        par->err = "Expected continue keyword";
+        return 0;
+    }
+    if (!match_token(par, TKN_SEMICOLON)) {
+        par->err = "Expected semicolon after continue";
+        return 0;
+    }
+    NodeData data = {
+        .token = token,
+    };
+    return insert_node_ast(&par->ast, AST_CONTINUE, data);
+}
+
 NodeIndex parse_block(Parser* par) {
     if (!match_token(par, TKN_L_BRACE)) {
         par->err = "Expected opening brace for block";
@@ -572,6 +636,30 @@ NodeIndex parse_block(Parser* par) {
                 return 0;
             }
             stmts[stmts_len] = if_stmt;
+            stmts_len++;
+        } else if (peek(par).tag == TKN_WHILE) {
+            NodeIndex while_stmt = parse_while(par);
+            if (while_stmt == 0) {
+                par->err = "Invalid while statement in block";
+                return 0;
+            }
+            stmts[stmts_len] = while_stmt;
+            stmts_len++;
+        } else if (peek(par).tag == TKN_BREAK) {
+            NodeIndex break_stmt = parse_break(par);
+            if (break_stmt == 0) {
+                par->err = "Invalid break statement in block";
+                return 0;
+            }
+            stmts[stmts_len] = break_stmt;
+            stmts_len++;
+        } else if (peek(par).tag == TKN_CONTINUE) {
+            NodeIndex continue_stmt = parse_continue(par);
+            if (continue_stmt == 0) {
+                par->err = "Invalid continue statement in block";
+                return 0;
+            }
+            stmts[stmts_len] = continue_stmt;
             stmts_len++;
         } else {
             NodeIndex expr = parse_expr(par, 0);
@@ -1039,6 +1127,42 @@ static void print_if_else(
     printf("}\n");
 }
 
+static void print_while(
+    const char* src,
+    AST* ast,
+    NodeIndex index,
+    uint32_t depth
+) {
+    NodeDataWhile* const data = (NodeDataWhile*)&ast->node_datas[index];
+    printf("While {\n");
+    print_indent(depth + 1);
+    printf("expr = ");
+    print_ast(src, ast, data->expr, depth + 1);
+    print_indent(depth + 1);
+    printf("block = ");
+    print_ast(src, ast, data->block, depth + 1);
+    print_indent(depth);
+    printf("}\n");
+}
+
+static void print_break(
+    const char* src,
+    AST* ast,
+    NodeIndex index,
+    uint32_t depth
+) {
+    printf("Break\n");
+}
+
+static void print_continue(
+    const char* src,
+    AST* ast,
+    NodeIndex index,
+    uint32_t depth
+) {
+    printf("continue\n");
+}
+
 static void print_top_level(
         const char* src,
         AST* ast,
@@ -1120,6 +1244,12 @@ void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth) {
             print_return(src, ast, index, depth); return;
         case AST_IF_ELSE:
             print_if_else(src, ast, index, depth); return;
+        case AST_WHILE:
+            print_while(src, ast, index, depth); return;
+        case AST_BREAK:
+            print_break(src, ast, index, depth); return;
+        case AST_CONTINUE:
+            print_continue(src, ast, index, depth); return;
         case AST__NULL: printf("NULL\n"); return;
         default: printf("UNIMPLEMENTED"); return;
     }
