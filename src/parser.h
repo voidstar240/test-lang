@@ -110,6 +110,12 @@ typedef struct {
 
 typedef struct {
     TokenIndex token;
+    NodeIndex expr;
+    uint8_t _pad[8];
+} NodeDataReturn;
+
+typedef struct {
+    TokenIndex token;
     ExtraIndex decls_start;
     ExtraIndex decls_count;
     uint8_t _pad[4];

@@ -473,6 +473,24 @@ NodeIndex parse_var_decl(Parser* par) {
     return insert_node_ast(&par->ast, AST_VAR_DECL, *(NodeData*)&data);
 }
 
+NodeIndex parse_return(Parser* par) {
+    TokenIndex token = par->cur_token;
+    if (!match_token(par, TKN_RETURN)) {
+        par->err = "Expected return keyword";
+        return 0;
+    }
+    NodeIndex ret_expr = parse_expr(par, 0);
+    if (!match_token(par, TKN_SEMICOLON)) {
+        par->err = "Expected semicolon after return statement";
+        return 0;
+    }
+    NodeDataReturn data = {
+        .token = token,
+        .expr = ret_expr,
+    };
+    return insert_node_ast(&par->ast, AST_RETURN, *(NodeData*)&data);
+}
+
 NodeIndex parse_block(Parser* par) {
     if (!match_token(par, TKN_L_BRACE)) {
         par->err = "Expected opening brace for block";
@@ -498,6 +516,14 @@ NodeIndex parse_block(Parser* par) {
                 return 0;
             }
             stmts[stmts_len] = var_decl;
+            stmts_len++;
+        } else if (peek(par).tag == TKN_RETURN) {
+            NodeIndex ret_stmt = parse_return(par);
+            if (ret_stmt == 0) {
+                par->err = "Invalid return statement in block";
+                return 0;
+            }
+            stmts[stmts_len] = ret_stmt;
             stmts_len++;
         } else {
             NodeIndex expr = parse_expr(par, 0);
@@ -610,6 +636,8 @@ NodeIndex parse_function_decl(Parser *par) {
         params_len++;
     }
 
+    // TODO parse return type
+
     NodeIndex block = parse_block(par);
     if (block == 0) {
         par->ast.nodes_len = pre_nodes_len;
@@ -634,8 +662,15 @@ NodeIndex parse_function_decl(Parser *par) {
     return insert_node_ast(&par->ast, AST_FUNCTION_DECL, *(NodeData*)&data);
 }
 
+// TODO soft error on functions if parser state is unchanged
+// If a parsing functions fails without changing the state of the parser
+// (eg. failed to match first token) no unwind should be triggered and a special
+// value should be returned to allow parsing to continue potentially checking
+// with a different parsing function. This would allow for an if else chain
+// calling parse for all valid constructs in the given context.
+
 // TODO better panic mode error handling
-// Stragety: Create a stack on parser containing all tokens that could be used
+// Strategy: Create a stack on parser containing all tokens that could be used
 // to terminate an unwind. When unwinding check the tokens on the stack. When a
 // token is encounted that is in the stack, stop the unwind, and return to the
 // function that pushed that token to the stack popping all higher tokens off
@@ -920,6 +955,21 @@ static void print_block(
     printf("}\n");
 }
 
+static void print_return(
+    const char* src,
+    AST* ast,
+    NodeIndex index,
+    uint32_t depth
+) {
+    NodeDataReturn* const data = (NodeDataReturn*)&ast->node_datas[index];
+    printf("Return {\n");
+    print_indent(depth + 1);
+    printf("expr = ");
+    print_ast(src, ast, data->expr, depth + 1);
+    print_indent(depth);
+    printf("}\n");
+}
+
 static void print_top_level(
         const char* src,
         AST* ast,
@@ -997,6 +1047,8 @@ void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth) {
             print_top_level(src, ast, index, depth); return;
         case AST_BLOCK:
             print_block(src, ast, index, depth); return;
+        case AST_RETURN:
+            print_return(src, ast, index, depth); return;
         case AST__NULL: printf("NULL\n"); return;
         default: printf("UNIMPLEMENTED"); return;
     }
