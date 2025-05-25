@@ -116,6 +116,13 @@ typedef struct {
 
 typedef struct {
     TokenIndex token;
+    NodeIndex if_expr;
+    NodeIndex then_block;
+    NodeIndex else_block;
+} NodeDataIfElse;
+
+typedef struct {
+    TokenIndex token;
     ExtraIndex decls_start;
     ExtraIndex decls_count;
     uint8_t _pad[4];
@@ -158,6 +165,7 @@ typedef enum {
     AST_RETURN,
     AST_TOP_LEVEL,
     AST_BLOCK,
+    AST_IF_ELSE,
 } NodeTag;
 
 
