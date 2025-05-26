@@ -83,9 +83,16 @@ typedef struct {
 
 typedef struct {
     TokenIndex token;
+    NodeIndex proto;
+    NodeIndex block;
+    uint8_t _pad[4];
+} NodeDataFnDecl;
+
+typedef struct {
+    TokenIndex token;
     ExtraIndex params_start;
     ExtraIndex params_count;
-    NodeIndex block; // TODO this probably shouldn't be in the prototype
+    NodeIndex ret_type;
 } NodeDataFnProto;
 
 typedef struct {
@@ -166,7 +173,8 @@ typedef enum {
     AST_INDEX,
     AST_ACCESS,
 
-    AST_FUNCTION_DECL,
+    AST_FN_DECL,
+    AST_FN_PROTO,
     AST_FN_PARAM,
     AST_VAR_DECL,
     AST_RETURN,
