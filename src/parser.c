@@ -694,6 +694,7 @@ NodeIndex parse_block(Parser* par) {
 }
 
 NodeIndex parse_function_decl(Parser *par) {
+    const TokenIndex fn_token = par->cur_token;
     if (!match_token(par, TKN_FN)) {
         par->err = "Expected fn keyword"; // TODO should this be an error?
         return 0;
@@ -773,6 +774,14 @@ NodeIndex parse_function_decl(Parser *par) {
     }
 
     // TODO parse return type
+    NodeIndex ret_type = 0;
+    if (peek(par).tag == TKN_IDENTIFIER) {
+        ret_type = parse_symbol(par);
+        if (ret_type == 0) {
+            par->err = "Error parsing return type for function";
+            return 0;
+        }
+    }
 
     NodeIndex block = parse_block(par);
     if (block == 0) {
@@ -793,9 +802,16 @@ NodeIndex parse_function_decl(Parser *par) {
         .token = name_index,
         .params_start = params_start,
         .params_count = params_len,
+        .ret_type = ret_type,
+    };
+    NodeIndex proto = insert_node_ast(&par->ast, AST_FN_PROTO,
+                                      *(NodeData*)&data);
+    const NodeDataFnDecl fn_data = {
+        .token = fn_token,
+        .proto = proto,
         .block = block,
     };
-    return insert_node_ast(&par->ast, AST_FUNCTION_DECL, *(NodeData*)&data);
+    return insert_node_ast(&par->ast, AST_FN_DECL, *(NodeData*)&fn_data);
 }
 
 // TODO soft error on functions if parser state is unchanged
@@ -1047,6 +1063,24 @@ static void print_fn_decl(
         uint32_t depth
 ) {
     printf("Func Decl {\n");
+    NodeDataFnDecl* const data = (NodeDataFnDecl*)&ast->node_datas[index];
+    print_indent(depth + 1);
+    printf("proto = ");
+    print_ast(src, ast, data->proto, depth + 1);
+    print_indent(depth + 1);
+    printf("block = ");
+    print_ast(src, ast, data->block, depth + 1);
+    print_indent(depth);
+    printf("}\n");
+}
+
+static void print_fn_proto(
+        const char* src,
+        AST* ast,
+        NodeIndex index,
+        uint32_t depth
+) {
+    printf("Func Proto {\n");
     NodeDataFnProto* const data = (NodeDataFnProto*)&ast->node_datas[index];
     print_indent(depth + 1);
     const char* name = &src[ast->tokens[data->token].start];
@@ -1065,8 +1099,8 @@ static void print_fn_decl(
         }
     }
     print_indent(depth + 1);
-    printf("block = ");
-    print_ast(src, ast, data->block, depth + 1);
+    printf("ret_type = ");
+    print_ast(src, ast, data->ret_type, depth + 1);
     print_indent(depth);
     printf("}\n");
 }
@@ -1177,14 +1211,7 @@ static void print_top_level(
         print_indent(depth + 1);
         printf("%d: ", i);
         const NodeIndex decl = extra->nodes[i % 2];
-        switch (ast->node_tags[decl]) {
-            case AST_VAR_DECL:
-                print_var_decl(src, ast, decl, depth + 1);
-                break;
-            case AST_FUNCTION_DECL:
-                print_fn_decl(src, ast, decl, depth + 1);
-                break;
-        }
+        print_ast(src, ast, decl, depth + 1);
     }
     print_indent(depth);
     printf("}\n");
@@ -1236,6 +1263,12 @@ void print_ast(const char* src, AST* ast, NodeIndex index, uint32_t depth) {
             print_access(src, ast, index, depth); return;
         case AST_VAR_DECL:
             print_var_decl(src, ast, index, depth); return;
+        case AST_FN_DECL:
+            print_fn_decl(src, ast, index, depth); return;
+        case AST_FN_PROTO:
+            print_fn_proto(src, ast, index, depth); return;
+        case AST_FN_PARAM:
+            print_fn_param(src, ast, index, depth); return;
         case AST_TOP_LEVEL:
             print_top_level(src, ast, index, depth); return;
         case AST_BLOCK:
